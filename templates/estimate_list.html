@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h1>見積一覧</h1>
+  <form method="get" class="form-inline">
+    <input type="text" name="q" placeholder="件名・顧客で検索" value="{{ q }}">
+    <button type="submit" class="btn">検索</button>
+  </form>
+
+  <form method="get" action="{{ url_for('estimate_new') }}" class="form-inline" style="margin-top: 1rem;">
+    <div class="radio-group" aria-label="見積タイプ（複数選択可）">
+      <label><input type="checkbox" name="type" value="太陽光"> 太陽光</label>
+      <label><input type="checkbox" name="type" value="蓄電池"> 蓄電池</label>
+      <label><input type="checkbox" name="type" value="単機能V2H"> 単機能V2H</label>
+      <label><input type="checkbox" name="type" value="トライブリッドV2H"> トライブリッドV2H</label>
+      <label><input type="checkbox" name="type" value="パワコン交換"> パワコン交換</label>
+      <label><input type="checkbox" name="type" value="撤去再設置"> 撤去再設置</label>
+      <label><input type="checkbox" name="type" value="その他工事"> その他工事</label>
+    </div>
+    <button type="submit" class="btn primary" style="margin-left: .5rem;">新規作成</button>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>作成日</th>
+          <th>件名</th>
+          <th>顧客</th>
+          <th>小計(税抜)</th>
+          <th>合計(税抜)</th>
+          <th>合計(税込)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in estimates %}
+          <tr>
+            <td><a href="{{ url_for('estimate_detail', estimate_id=e.id) }}">#{{ e.id }}</a></td>
+            <td>{{ e.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>{{ e.title }}</td>
+            <td>{{ e.customer_name }}</td>
+            <td>¥{{ "{:,.0f}".format(e.subtotal_price) }}</td>
+            <td>¥{{ "{:,.0f}".format(e.total_price) }}</td>
+            <td class="total-tax-included">
+              {% set total_incl = e.total_price * 1.10 %}
+              ¥{{ "{:,.0f}".format(total_incl) }}
+            </td>
+          </tr>
+        {% endfor %}
+        {% if estimates|length == 0 %}
+          <tr><td colspan="7" class="muted">データがありません</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

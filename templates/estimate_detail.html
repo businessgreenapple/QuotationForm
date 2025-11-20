@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h1>見積詳細 #{{ estimate.id }}</h1>
+  <div class="grid-2">
+    <div>
+      <div class="kv"><span class="k">件名</span><span class="v">{{ estimate.title }}</span></div>
+      <div class="kv"><span class="k">顧客</span><span class="v">{{ estimate.customer_name }}</span></div>
+    </div>
+    <div>
+      <div class="kv"><span class="k">作成日</span><span class="v">{{ estimate.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+    </div>
+  </div>
+
+  <h2>明細</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>商品</th>
+          <th>型式</th>
+          <th>数量</th>
+          <th>単価</th>
+          <th>金額</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in estimate.items %}
+          <tr>
+            <td>{{ it.product_name }}</td>
+            <td>{{ it.model_name or '' }}</td>
+            <td>{{ it.quantity }}</td>
+            <td>¥{{ "{:,.0f}".format(it.unit_price) }}</td>
+            <td>¥{{ "{:,.0f}".format(it.line_total_price) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% set gross_profit = estimate.gross_profit or 0.0 %}
+  {% set subtotal_price_val = estimate.subtotal_price or 0.0 %}
+  {% set selling_expense = subtotal_price_val * 0.2 %}
+  {% set operating_profit = estimate.operating_profit or 0.0 %}
+  {% set total_price = estimate.total_price or 0.0 %}
+  {% set material_cost = material_cost or 0.0 %}
+  {% set material_rate = (material_cost / total_price * 100.0) if total_price > 0 else 0.0 %}
+  {% set cost_rate = ((estimate.subtotal_cost or 0.0) / total_price * 100.0) if total_price > 0 else 0.0 %}
+  {% set gross_margin_rate = (gross_profit / total_price * 100.0) if total_price > 0 else 0.0 %}
+  {% set selling_expense_rate = (selling_expense / subtotal_price_val * 100.0) if subtotal_price_val > 0 else 0.0 %}
+  {% set operating_margin_rate = (operating_profit / total_price * 100.0) if total_price > 0 else 0.0 %}
+  {% set total_incl = total_price * 1.10 %}
+
+  <div class="totals-layout">
+    <div class="totals-card totals-card-profit">
+      <h3>利益サマリ</h3>
+      <div class="profit-summary-grid">
+        <div class="profit-summary-col">
+          <div class="profit-summary-title">金額</div>
+          <div class="totals-row-item">
+            <span class="label">材料費(税抜)</span>
+            <span class="value">¥{{ "{:,.0f}".format(material_cost) }}</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">原価(税抜)</span>
+            <span class="value">¥{{ "{:,.0f}".format(estimate.subtotal_cost or 0.0) }}</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">粗利(税抜)</span>
+            <span class="value">¥{{ "{:,.0f}".format(gross_profit) }}</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">販管費(税抜)</span>
+            <span class="value">¥{{ "{:,.0f}".format(selling_expense) }}</span>
+          </div>
+          <div class="totals-row-item highlight">
+            <span class="label">営業利益(税抜)</span>
+            <span class="value">¥{{ "{:,.0f}".format(operating_profit) }}</span>
+          </div>
+        </div>
+        <div class="profit-summary-col">
+          <div class="profit-summary-title">利益率</div>
+          <div class="totals-row-item">
+            <span class="label">材料費率</span>
+            <span class="value">{{ "{:.1f}".format(material_rate) }}%</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">原価率</span>
+            <span class="value">{{ "{:.1f}".format(cost_rate) }}%</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">粗利率</span>
+            <span class="value">{{ "{:.1f}".format(gross_margin_rate) }}%</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">販管費率</span>
+            <span class="value">{{ "{:.1f}".format(selling_expense_rate) }}%</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">営業利益率</span>
+            <span class="value">{{ "{:.1f}".format(operating_margin_rate) }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="totals-card totals-card-summary">
+      <h3>金額サマリ</h3>
+      <div class="totals-row-item">
+        <span class="label">小計(税抜)</span>
+        <span class="value">¥{{ "{:,.0f}".format(estimate.subtotal_price) }}</span>
+      </div>
+      <div class="totals-row-item">
+        <span class="label">値引(税抜)</span>
+        <span class="value">-¥{{ "{:,.0f}".format(estimate.discount or 0.0) }}</span>
+      </div>
+      <div class="totals-row-item">
+        <span class="label">合計(税抜)</span>
+        <span class="value">¥{{ "{:,.0f}".format(estimate.total_price) }}</span>
+      </div>
+      <div class="totals-row-item highlight">
+        <span class="label">合計(税込)</span>
+        <span class="value">¥{{ "{:,.0f}".format(total_incl) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <a href="{{ url_for('estimate_list') }}" class="btn">一覧へ</a>
+  </div>
+{% endblock %}

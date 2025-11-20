@@ -1,0 +1,465 @@
+{
+  "SOL-001": [
+    {
+      "code": "JKM450N-54HL4R-V",
+      "name": "JKM450N-54HL4R-V（ジンコ）",
+      "unit_price": 26000,
+      "unit_cost": 7437.03
+    }
+  ],
+  "SOL-002": [
+    {
+      "code": "SPSS-55E-SN",
+      "name": "SPSS-55E-SN（パナ屋外）",
+      "unit_price": 180000,
+      "unit_cost": 98899.18
+    },
+    {
+      "code": "SPSM-554BS-SN",
+      "name": "SPSM-554BS-SN（パナ屋外マルチ）",
+      "unit_price": 220000,
+      "unit_cost": 128799.88
+    },
+    {
+      "code": "SPSM-444BS-SN",
+      "name": "SPSM-444BS-SN（パナ屋外マルチ）",
+      "unit_price": 200000,
+      "unit_cost": 118498.11
+    },
+    {
+      "code": "ES-T3",
+      "name": "ES-T3（ニチコン屋外マルチ）",
+      "unit_price": 600000,
+      "unit_cost": 381200.0
+    }
+  ],
+  "SOL-003": [
+    {
+      "code": "SPCM277S-SN",
+      "name": "SPCM277S-SN（パナ）",
+      "unit_price": 80000,
+      "unit_cost": 46339.26
+    }
+  ],
+  "SOL-004": [
+    {
+      "code": "NV50-NKC 30A",
+      "name": "NV50-NKC 30A",
+      "unit_price": 10000,
+      "unit_cost": 3578.37
+    },
+    {
+      "code": "NV50-NKC 40A",
+      "name": "NV50-NKC 40A",
+      "unit_price": 10000,
+      "unit_cost": 3685.49
+    },
+    {
+      "code": "NV50-NKC 50A",
+      "name": "NV50-NKC 50A",
+      "unit_price": 10000,
+      "unit_cost": 4057.98
+    }
+  ],
+  "SOL-005": [
+    {
+      "code": "B-53EC 30A",
+      "name": "B-53EC 30A",
+      "unit_price": 10000,
+      "unit_cost": 2570.0
+    },
+    {
+      "code": "B-53EC 40A",
+      "name": "B-53EC 40A",
+      "unit_price": 10000,
+      "unit_cost": 3073.73
+    },
+    {
+      "code": "B-53EC 50A",
+      "name": "B-53EC 50A",
+      "unit_price": 10000,
+      "unit_cost": 3138.06
+    },
+    {
+      "code": "B-63EC 60A",
+      "name": "B-63EC 60A",
+      "unit_price": 10000,
+      "unit_cost": 3082.87
+    },
+    {
+      "code": "B-103EC 75A",
+      "name": "B-103EC 75A",
+      "unit_price": 10000,
+      "unit_cost": 7039.5
+    },
+    {
+      "code": "B-103EC 100A",
+      "name": "B-103EC 100A",
+      "unit_price": 10000,
+      "unit_cost": 5904.0
+    }
+  ],
+  "SOL-006": [
+    {
+      "code": "KTN-CBD4C",
+      "name": "KTN-CBD4C",
+      "unit_price": 10000,
+      "unit_cost": 6899.99
+    }
+  ],
+  "SOL-007": [],
+  "SOL-007R": [],
+  "SOL-008": [],
+  "SOL-009": [],
+  "SOL-010": [],
+  "SOL-011": [],
+  "BAT-001": [
+    {
+      "code": "ES-T3",
+      "name": "ES-T3（ニチコン）",
+      "unit_price": 600000,
+      "unit_cost": 381200.0
+    }
+  ],
+  "BAT-002": [
+    {
+      "code": "NV50-NKC 30A",
+      "name": "NV50-NKC 30A",
+      "unit_price": 10000,
+      "unit_cost": 3578.37
+    },
+    {
+      "code": "NV50-NKC 40A",
+      "name": "NV50-NKC 40A",
+      "unit_price": 10000,
+      "unit_cost": 3685.49
+    },
+    {
+      "code": "NV50-NKC 50A",
+      "name": "NV50-NKC 50A",
+      "unit_price": 10000,
+      "unit_cost": 4057.98
+    }
+  ],
+  "BAT-003": [
+    {
+      "code": "B-53EC 30A",
+      "name": "B-53EC 30A",
+      "unit_price": 10000,
+      "unit_cost": 2570.0
+    },
+    {
+      "code": "B-53EC 40A",
+      "name": "B-53EC 40A",
+      "unit_price": 10000,
+      "unit_cost": 3073.73
+    },
+    {
+      "code": "B-53EC 50A",
+      "name": "B-53EC 50A",
+      "unit_price": 10000,
+      "unit_cost": 3138.06
+    },
+    {
+      "code": "B-63EC 60A",
+      "name": "B-63EC 60A",
+      "unit_price": 10000,
+      "unit_cost": 3082.87
+    },
+    {
+      "code": "B-103EC 75A",
+      "name": "B-103EC 75A",
+      "unit_price": 10000,
+      "unit_cost": 7039.5
+    },
+    {
+      "code": "B-103EC 100A",
+      "name": "B-103EC 100A",
+      "unit_price": 10000,
+      "unit_cost": 5904.0
+    }
+  ],
+  "BAT-004": [
+    {
+      "code": "ES-T3M1",
+      "name": "ES-T3M1（7.4kWh）",
+      "unit_price": 900000,
+      "unit_cost": 519400.0
+    },
+    {
+      "code": "ESS-U4M1",
+      "name": "ESS-U4M1（11.1kWh）",
+      "unit_price": 1477000,
+      "unit_cost": 977000.0
+    },
+    {
+      "code": "ESS-U4X1",
+      "name": "ESS-U4X1（16.6kWh）",
+      "unit_price": 2004000,
+      "unit_cost": 1334000.0
+    }
+  ],
+  "BAT-005": [
+    {
+      "code": "ES-B8T",
+      "name": "ES-B8T",
+      "unit_price": 60000,
+      "unit_cost": 30800.0
+    }
+  ],
+  "BAT-006": [],
+  "BAT-007": [],
+  "V2H-001": [
+    {
+      "code": "VSG3-666CN7AS",
+      "name": "VSG3-666CN7HB（標準シルバー）",
+      "unit_price": 1280000,
+      "unit_cost": 761000.0
+    },
+    {
+      "code": "VSG3-666CN7AB",
+      "name": "VSG3-666CN7AB（標準ブロンズ）",
+      "unit_price": 1280000,
+      "unit_cost": 761000.0
+    },
+    {
+      "code": "VSG3-666CN7HS",
+      "name": "VSG3-666CN7HS（重塩害シルバー）",
+      "unit_price": 1400000,
+      "unit_cost": 826000.0
+    },
+    {
+      "code": "VSG3-666CN7HB",
+      "name": "VSG3-666CN7HB（重塩害ブロンズ）",
+      "unit_price": 1400000,
+      "unit_cost": 826000.0
+    }
+  ],
+  "V2H-002": [
+    {
+      "code": "VSG3-SBS01",
+      "name": "VSG3-SBS01（据置・壁掛）",
+      "unit_price": 70000,
+      "unit_cost": 34660.0
+    },
+    {
+      "code": "VSG3-SBS02",
+      "name": "VSG3-SBS02（据置・ポール）",
+      "unit_price": 120000,
+      "unit_cost": 64440.0
+    },
+    {
+      "code": "VSG3-SBS03",
+      "name": "VSG3-SBS03（壁掛・壁掛）",
+      "unit_price": 70000,
+      "unit_cost": 28590.0
+    },
+    {
+      "code": "VSG3-SBS04",
+      "name": "VSG3-SBS04（据置・ポール）",
+      "unit_price": 120000,
+      "unit_cost": 58370.0
+    }
+  ],
+  "V2H-003": [
+    {
+      "code": "VSG3-RKST01",
+      "name": "VSG3-RKST01",
+      "unit_price": 90000,
+      "unit_cost": 33400.0
+    },
+    {
+      "code": "VSG3-RKST02",
+      "name": "VSG3-RKST02",
+      "unit_price": 90000,
+      "unit_cost": 43400.0
+    },
+    {
+      "code": "VSG3-RKST03",
+      "name": "VSG3-RKST03（CT付き）",
+      "unit_price": 120000,
+      "unit_cost": 52800.0
+    },
+    {
+      "code": "VSG3-RKST04",
+      "name": "VSG3-RKST04（CT付き）",
+      "unit_price": 120000,
+      "unit_cost": 66100.0
+    },
+    {
+      "code": "VSG3-RKST05",
+      "name": "VSG3-RKST05（CT付き）",
+      "unit_price": 120000,
+      "unit_cost": 74100.0
+    },
+    {
+      "code": "VSG3-RKST06",
+      "name": "VSG3-RKST06",
+      "unit_price": 120000,
+      "unit_cost": 86000.0
+    },
+    {
+      "code": "VSG3-RKST07",
+      "name": "VSG3-RKST07（CT付き）",
+      "unit_price": 120000,
+      "unit_cost": 94000.0
+    }
+  ],
+  "V2H-010": [
+    {
+      "code": "VSG3-RMC20",
+      "name": "VSG3-RMC20（リモコンセット）",
+      "unit_price": 90000,
+      "unit_cost": 42750.0
+    },
+    {
+      "code": "VSG3-RMC40",
+      "name": "VSG3-RMC40（リモコンセット）",
+      "unit_price": 1000000,
+      "unit_cost": 47700.0
+    }
+  ],
+  "V2H-011": [
+    {
+      "code": "VSG3-CVR01",
+      "name": "VSG3-CVR01（ケーブルカバー）",
+      "unit_price": 15000,
+      "unit_cost": 8000.0
+    }
+  ],
+  "V2H-012": [
+    {
+      "code": "ES-C22S",
+      "name": "ES-C22S（AC_CTケーブルセット）",
+      "unit_price": 20000,
+      "unit_cost": 9700.0
+    },
+    {
+      "code": "ES-C24S",
+      "name": "ES-C24S（AC_CTケーブルセット）",
+      "unit_price": 30000,
+      "unit_cost": 15300.0
+    }
+  ],
+  "V2H-013": [
+    {
+      "code": "ESS-CT20",
+      "name": "ESS-CT20（CTセンサ 内径φ24）",
+      "unit_price": 10000,
+      "unit_cost": 5700.0
+    }
+  ],
+  "V2H-004": [],
+  "V2H-005": [],
+  "V2H-006": [],
+  "V2H-007": [],
+  "V2H-008": [],
+  "V2H-009": [],
+  "TVH-001": [
+    {
+      "code": "ES-T3V1",
+      "name": "ES-T3V1（一体型）",
+      "unit_price": 1300000,
+      "unit_cost": 605400.0
+    },
+    {
+      "code": "ES-T3P1",
+      "name": "ES-T3P1（セパレート型3.5m）",
+      "unit_price": 1500000,
+      "unit_cost": 656700.0
+    },
+    {
+      "code": "ES-T3PL1",
+      "name": "ES-T3PL1（セパレート型7.5m）",
+      "unit_price": 1600000,
+      "unit_cost": 682400.0
+    }
+  ],
+  "TVH-002": [
+    {
+      "code": "ESS-C52",
+      "name": "ESS-C52（20m）",
+      "unit_price": 20000,
+      "unit_cost": 5340.0
+    },
+    {
+      "code": "ESS-C54",
+      "name": "ESS-C54（40m）",
+      "unit_price": 20000,
+      "unit_cost": 7910.0
+    }
+  ],
+  "TVH-003": [],
+  "TVH-004": [],
+  "TVH-005": [],
+  "TVH-006": [],
+  "TVH-007": [
+    {
+      "code": "ES-T3H5",
+      "name": "ES-T3H5",
+      "unit_price": 50000,
+      "unit_cost": 34220.0
+    }
+  ],
+  "TVH-008": [],
+  "TVH-009": [],
+  "PWR-001": [
+    {
+      "code": "SPSS-55E-SN",
+      "name": "SPSS-55E-SN（パナ屋外）",
+      "unit_price": 180000,
+      "unit_cost": 98899.18
+    },
+    {
+      "code": "SPSM-554BS-SN",
+      "name": "SPSM-554BS-SN（パナ屋外マルチ）",
+      "unit_price": 220000,
+      "unit_cost": 128799.88
+    },
+    {
+      "code": "SPSM-444BS-SN",
+      "name": "SPSM-444BS-SN（パナ屋外マルチ）",
+      "unit_price": 200000,
+      "unit_cost": 118498.11
+    },
+    {
+      "code": "SPUS-30E-SN",
+      "name": "SPUS-30E-SN（パナ屋内）",
+      "unit_price": 180000,
+      "unit_cost": 77000.0
+    },
+    {
+      "code": "SPUS-40E-SN",
+      "name": "SPUS-40E-SN（パナ屋内）",
+      "unit_price": 200000,
+      "unit_cost": 84000.0
+    },
+    {
+      "code": "SPUS-55E-SN",
+      "name": "SPUS-55E-SN（パナ屋内）",
+      "unit_price": 220000,
+      "unit_cost": 103800.0
+    }
+  ],
+  "PWR-002": [
+    {
+      "code": "SPCM277S-SN",
+      "name": "SPCM277S-SN（パナ）",
+      "unit_price": 80000,
+      "unit_cost": 46339.26
+    }
+  ],
+  "PWR-003": [],
+  "PWR-004": [],
+  "PWR-005": [],
+  "PWR-006": [],
+  "RRI-001": [],
+  "RRI-002": [],
+  "RRI-003": [],
+  "RRI-004": [],
+  "RRI-005": [],
+  "RRI-006": [],
+  "RRI-007": [],
+  "RRI-008": [],
+  "RRI-009": []
+}

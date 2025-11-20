@@ -1,0 +1,235 @@
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; margin: 0; color: #222; }
+.container { max-width: 980px; margin: 0 auto; padding: 1rem; }
+.app-header { background: #0f172a; color: #fff; }
+.app-header .brand { color: #fff; text-decoration: none; font-weight: 600; margin-right: 1rem; }
+.app-header nav { display: inline-block; }
+
+h1 { font-size: 1.4rem; margin: 1rem 0; }
+h2 { font-size: 1.2rem; margin: 1rem 0 0.5rem; }
+
+input[type="text"], input[type="number"], select { width: 100%; padding: 0.6rem; font-size: 1rem; }
+label { display: block; margin: 0 0 0.3rem; color: #334155; }
+
+.btn { display: inline-block; padding: 0.5rem 0.8rem; background: #e2e8f0; border: none; border-radius: 6px; text-decoration: none; color: #111; cursor: pointer; }
+.btn.primary { background: #2563eb; color: #fff; }
+.btn.danger { background: #ef4444; color: #fff; }
+
+.form-inline { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 1rem; }
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border-bottom: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
+.table td.right { text-align: right; }
+.muted { color: #6b7280; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.radio-group { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+.radio-group label {
+  display: inline-flex; /* 行全体ではなくラベル部分のみクリック可能にする */
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  margin: 0;
+  width: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.radio-group label:hover { background: #f8fafc; }
+.radio-group input[type="radio"],
+.radio-group input[type="checkbox"] { margin: 0; accent-color: #2563eb; }
+/* 選択状態のチップ強調 */
+.radio-group label:has(input[type="radio"]:checked),
+.radio-group label:has(input[type="checkbox"]:checked) {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
+}
+/* キーボード操作時のフォーカスリング */
+.radio-group label:has(input[type="radio"]:focus-visible),
+.radio-group label:has(input[type="checkbox"]:focus-visible) {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+/* 押下時のわずかな押し込み表現 */
+.radio-group label:active { transform: translateY(1px); }
+
+.flash-list { list-style: none; padding: 0; }
+.flash { padding: 0.6rem; border-radius: 6px; margin: 0.5rem 0; }
+.flash.success { background: #dcfce7; }
+.flash.error { background: #fee2e2; }
+
+.totals {
+  margin: 1rem 0;
+  margin-left: auto;
+  padding: 0.75rem 1rem;
+  background: #eff6ff;
+  border: 2px solid #2563eb;
+  border-radius: 6px;
+  font-weight: 700;
+  text-align: right;
+  width: 30%;
+}
+.totals div {
+  min-height: 1.5rem;
+  color: #1e40af;
+  font-size: 1.1rem;
+}
+.totals span {
+  font-size: 1.2rem;
+  color: #1e3a8a;
+}
+
+/* 合計(税込) 強調表示 */
+.total-tax-included,
+.total-tax-included span {
+  color: #b91c1c;
+}
+
+/* 合計(税込) セクション全体の強調 */
+.totals.totals-tax-included {
+  background: #fef2f2;
+  border-color: #b91c1c;
+}
+.totals.totals-tax-included div {
+  color: #b91c1c;
+}
+
+.system-capacity-banner {
+  margin: 1rem 0;
+  padding: 0.6rem 0.8rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.outsourcing-wrap {
+  margin: 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: #fff7ed;
+  border: 1px solid #f97316;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  width: 40%;
+}
+.outsourcing-wrap label {
+  margin: 0;
+  color: #9a3412;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: 0 0 6rem;
+}
+.outsourcing-wrap .outsourcing-input {
+  width: 18rem;
+  max-width: 50%;
+  border: 2px solid #f97316;
+  background-color: #fff;
+  font-weight: 600;
+}
+.actions { display: flex; gap: 0.5rem; }
+
+.kv { display: grid; grid-template-columns: 6rem 1fr; gap: 0.5rem; margin: 0.3rem 0; }
+.kv .k { color: #475569; }
+
+/* 見積詳細のサマリレイアウト */
+.totals-layout {
+  display: flex;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+@media (max-width: 640px) {
+  .totals-layout {
+    flex-direction: column;
+  }
+}
+.totals-card {
+  flex: 1;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 2px solid #2563eb;
+}
+.totals-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #1e3a8a;
+}
+.totals-row-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0.25rem 0;
+  font-weight: 600;
+}
+.totals-row-item .label {
+  color: #4b5563;
+}
+.totals-row-item .value {
+  color: #1e3a8a;
+}
+.totals-row-item.highlight .value {
+  color: #b91c1c;
+}
+.totals-card-profit {
+  background: #ecfdf5;
+  border-color: #16a34a;
+}
+.totals-card-profit h3 {
+  color: #166534;
+}
+.totals-card-profit .value {
+  color: #166534;
+}
+.totals-card-profit .highlight .value {
+  color: #b91c1c;
+}
+.totals-card-summary {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+/* 利益サマリ内の2カラム（金額 / 利益率） */
+.profit-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1.25rem;
+}
+@media (max-width: 640px) {
+  .profit-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.profit-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.profit-summary-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #4b5563;
+  margin-bottom: 0.25rem;
+}
+
+/* 視覚的ロック（読み取り専用/無効） */
+input[readonly] {
+  background: #f8fafc; /* やや薄いグレー/ブルー背景 */
+  color: #6b7280;      /* グレー文字 */
+  cursor: not-allowed;
+  border: 1px solid #e5e7eb;
+}
+select:disabled,
+input:disabled {
+  background: #f1f5f9;
+  color: #6b7280;
+  cursor: not-allowed;
+}

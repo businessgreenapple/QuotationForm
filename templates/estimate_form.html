@@ -1,0 +1,1320 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h1>新規見積{% if selected_types and selected_types|length > 0 %}（{{ selected_types | join('・') }}）{% elif selected_type %}（{{ selected_type }}）{% endif %}</h1>
+  <form method="post" action="{{ url_for('estimate_create') }}" id="estimate-form">
+    <div class="form-section">
+      <label>見積タイプ</label>
+      <div class="radio-group" id="estimate-type-group">
+        <label><input type="checkbox" name="estimate_type" value="太陽光" {% if (selected_types and '太陽光' in selected_types) or selected_type == '太陽光' %}checked{% endif %} disabled> 太陽光</label>
+        <label><input type="checkbox" name="estimate_type" value="蓄電池" {% if (selected_types and '蓄電池' in selected_types) or selected_type == '蓄電池' %}checked{% endif %} disabled> 蓄電池</label>
+        <label><input type="checkbox" name="estimate_type" value="単機能V2H" {% if (selected_types and '単機能V2H' in selected_types) or selected_type == '単機能V2H' %}checked{% endif %} disabled> 単機能V2H</label>
+        <label><input type="checkbox" name="estimate_type" value="トライブリッドV2H" {% if (selected_types and 'トライブリッドV2H' in selected_types) or selected_type == 'トライブリッドV2H' %}checked{% endif %} disabled> トライブリッドV2H</label>
+        <label><input type="checkbox" name="estimate_type" value="パワコン交換" {% if (selected_types and 'パワコン交換' in selected_types) or selected_type == 'パワコン交換' %}checked{% endif %} disabled> パワコン交換</label>
+        <label><input type="checkbox" name="estimate_type" value="撤去再設置" {% if (selected_types and '撤去再設置' in selected_types) or selected_type == '撤去再設置' %}checked{% endif %} disabled> 撤去再設置</label>
+        <label><input type="checkbox" name="estimate_type" value="その他工事" {% if (selected_types and 'その他工事' in selected_types) or selected_type == 'その他工事' %}checked{% endif %} disabled> その他工事</label>
+      </div>
+      {% if selected_types and selected_types|length > 0 %}
+      <div class="muted">選択されたタイプ：{{ selected_types | join('、') }}</div>
+      {% elif selected_type %}
+      <div class="muted">選択されたタイプ：{{ selected_type }}</div>
+      {% endif %}
+    </div>
+    <div class="grid-2">
+      <div>
+        <label>件名</label>
+        <input type="text" name="title" placeholder="例：制御盤更新工事 一式" required>
+      </div>
+      <div>
+        <label>顧客</label>
+        <select name="customer_id" required>
+          <option value="">選択してください</option>
+          {% for c in customers %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="system-capacity-banner">
+      システム容量：<span id="system-capacity">0.00 kW</span>
+      {% if (selected_types and '撤去再設置' in selected_types) or selected_type == '撤去再設置' %}
+      <input
+        type="number"
+        id="system-capacity-input"
+        name="system_capacity"
+        min="0"
+        step="0.001"
+        placeholder="0.000"
+        class="system-capacity-input"
+      >
+      {% endif %}
+    </div>
+    <!-- 複数タイプに対応したセクションの動的コンテナ -->
+    <div id="sections"></div>
+
+    <!-- 小計セクション -->
+    <div class="totals">
+      <div>小計(税抜)：<span id="subtotal-price">¥0</span></div>
+    </div>
+
+    <!-- 値引セクション（税抜） -->
+    <div class="totals">
+      <label for="discount-amount">値引（税抜）</label>
+      <input
+        type="number"
+        id="discount-amount"
+        name="discount_amount"
+        min="0"
+        value="0"
+        inputmode="numeric"
+      >
+    </div>
+
+    <!-- 合計セクション（値引後・税抜） -->
+    <div class="totals">
+      <div>合計(税抜)：<span id="total-price">¥0</span></div>
+    </div>
+
+    <!-- 合計セクション（値引後・税込） -->
+    <div class="totals totals-tax-included">
+      <div class="total-tax-included">合計(税込)：<span id="total-price-tax-included">¥0</span></div>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn primary">保存</button>
+      <a href="{{ url_for('estimate_list') }}" class="btn">戻る</a>
+    </div>
+  </form>
+
+  <script>
+    const selectedTypes = {{ (selected_types or []) | tojson }};
+    const selectedType = "{{ selected_type }}"; // 後方互換（単一指定）
+    const productsRaw = [
+      {% for p in products %}
+        { code: "{{ p.code }}", name: "{{ p.name }}", unit_price: {{ p.unit_price|int }}, unit_cost: {{ p.unit_cost|int }} }{{ "," if not loop.last }}
+      {% endfor %}
+    ];
+    const products = (() => {
+      const seen = new Set();
+      const arr = [];
+      for (const p of productsRaw) {
+        if (seen.has(p.name)) continue;
+        seen.add(p.name);
+        arr.push(p);
+      }
+      return arr;
+    })();
+    const modelsMap = {{ models | tojson }};
+
+    const sectionsEl = document.getElementById('sections');
+    const typeGroup = document.getElementById('estimate-type-group');
+    const systemCapacityEl = document.getElementById('system-capacity');
+    const systemCapacityInput = document.getElementById('system-capacity-input');
+    const discountInput = document.getElementById('discount-amount');
+    const totalPriceEl = document.getElementById('total-price');
+    const totalPriceTaxIncludedEl = document.getElementById('total-price-tax-included');
+
+    // 消費税率（例：10%）
+    const TAX_RATE = 0.10;
+    let outsourcingInput = null;
+    let outsourcingWrap = null;
+    let outsourcingBaseType = null; // 外注金額欄を紐づける見積タイプ（太陽光を最優先）
+    const isReinstallEstimate =
+      (Array.isArray(selectedTypes) && selectedTypes.includes('撤去再設置')) ||
+      selectedType === '撤去再設置';
+    let dragSrcRow = null;
+    const LOCKED_CODES = new Set(["SOL-007", "SOL-007R", "SOL-008", "SOL-009", "SOL-010", "SOL-011", "BAT-006", "BAT-007", "V2H-004", "V2H-005", "V2H-006", "V2H-007", "V2H-008", "V2H-009", "TVH-003", "TVH-004", "TVH-005", "TVH-006", "TVH-008", "TVH-009"]);
+    const NON_DELETABLE_SOLAR_CODES = new Set([
+      "SOL-001", // 太陽電池モジュール
+      "SOL-002", // パワーコンディショナ
+      "SOL-004", // 漏電遮断器
+      "SOL-007", // 取付架台
+      "SOL-008",
+      "SOL-009",
+      "SOL-010",
+      "SOL-011",
+    ]);
+    const NON_DELETABLE_BATTERY_CODES = new Set([
+      "BAT-004", // 蓄電池ユニット
+      "BAT-006", // その他部材
+      "BAT-007", // 蓄電池設置工事費
+    ]);
+    const NON_DELETABLE_V2H_SINGLE_CODES = new Set([
+      "V2H-001",
+      "V2H-002",
+      "V2H-003",
+      "V2H-004",
+      "V2H-005",
+      "V2H-006",
+      "V2H-007",
+      "V2H-008",
+      "V2H-009",
+    ]);
+    const NON_DELETABLE_V2H_HYBRID_CODES = new Set([
+      "TVH-001",
+      "TVH-002",
+      "TVH-003",
+      "TVH-004",
+      "TVH-005",
+      "TVH-006",
+      "TVH-008",
+      "TVH-009",
+    ]);
+    const NON_DELETABLE_REINSTALL_CODES = new Set([
+      "RRI-008", // 現場管理費
+      "RRI-009", // 安全対策費
+    ]);
+    const NON_DELETABLE_PWREX_CHANGE_CODES = new Set([
+      "PWR-001", // パワーコンディショナ
+      "PWR-003", // 設置工事費
+      "PWR-004", // 電気工事費（材料費込）
+      "PWR-005", // 運搬費・現場雑費
+      "PWR-006", // 事務手数料
+    ]);
+    const SPECIAL_PRODUCT_OPTIONS = {
+      "SOL-007": ["SOL-007", "SOL-007R"],
+      "SOL-007R": ["SOL-007", "SOL-007R"],
+    };
+    // 「行を追加」で選択可能にする商品名のホワイトリスト
+    const ALLOWED_ADD_ROW_PRODUCT_NAMES = [
+      "パワーコンディショナ",
+      "リモコンセット",
+      "ケーブルカバー",
+      "AC_CTケーブルセット",
+      "CTセンサ（内径θ24）",
+    ];
+    // 見積タイプごとに「行を追加」で許可する商品コード（パワーコンディショナが複数あるためタイプ別に制限）
+    const SECTION_WHITELIST_CODES = {
+      "太陽光": new Set(["SOL-002"]),   // 太陽光用パワーコンディショナ
+      "蓄電池": new Set(["BAT-001"]),   // 蓄電池用パワーコンディショナ
+      "パワコン交換": new Set(["PWR-001"]), // パワコン交換用パワーコンディショナ
+    };
+    const moduleCapacityMap = {
+      "JKM450N-54HL4R-V": 0.45,
+    };
+    // セクションごとに「削除された商品コード」を記録するマップ
+    const deletedItemCodesBySection = new Map();
+
+    // 保証書発行手数料（全見積タイプ共通）用の商品コード
+    const WARRANTY_FEE_PRODUCT_CODE = "FEE-001";
+
+    // 外注金額入力欄を、対象セクション（太陽光 or 撤去再設置）の直下に配置する
+    function ensureOutsourcingField(afterElement, type) {
+      if (!afterElement) return;
+
+      // 既に太陽光セクションに紐づいている場合は、それ以外のタイプから位置変更しない
+      if (outsourcingBaseType === '太陽光' && type !== '太陽光') {
+        return;
+      }
+
+      if (!outsourcingWrap) {
+        outsourcingWrap = document.createElement('div');
+        outsourcingWrap.className = 'outsourcing-wrap';
+        outsourcingWrap.innerHTML = `
+          <label for="outsourcing-cost">外注金額（税抜）</label>
+          <input
+            type="number"
+            id="outsourcing-cost"
+            name="outsourcing_cost"
+            min="0"
+            value="0"
+            inputmode="numeric"
+            class="outsourcing-input"
+          >
+        `;
+        outsourcingInput = outsourcingWrap.querySelector('#outsourcing-cost');
+        if (outsourcingInput) {
+          outsourcingInput.addEventListener('input', recalc);
+        }
+      }
+
+      // まだどのタイプにも紐づいていない、または太陽光からの呼び出しなら位置を更新
+      if (!outsourcingBaseType || type === '太陽光') {
+        const parent = afterElement.parentNode || sectionsEl;
+        parent.insertBefore(outsourcingWrap, afterElement.nextSibling);
+        outsourcingBaseType = type;
+      }
+    }
+
+    function fmtYen(n) { return '¥' + (Math.round(n)).toLocaleString(); }
+
+    function createRow(bodyEl) {
+      // この行が属するセクション（見積タイプ）を取得
+      const section = bodyEl.closest('.table-wrap');
+      const sectionType = section ? section.getAttribute('data-type') : null;
+      const sectionWhitelist = sectionType && SECTION_WHITELIST_CODES[sectionType]
+        ? SECTION_WHITELIST_CODES[sectionType]
+        : null;
+      const deletedCodes =
+        section && deletedItemCodesBySection.has(section)
+          ? deletedItemCodesBySection.get(section)
+          : new Set();
+
+      // 「行を追加」で選択可能な商品
+      //  - 常にホワイトリスト（パワーコンディショナなど）
+      //  - そのセクションで一度削除された商品コード
+      const candidateProducts = [];
+      const seenCodes = new Set();
+      for (const p of productsRaw) {
+        let isWhitelisted = ALLOWED_ADD_ROW_PRODUCT_NAMES.includes(p.name);
+        // 見積タイプごとにパワーコンディショナを振り分ける
+        // 例：太陽光では SOL-002 のみ、蓄電池では BAT-001 のみ、など
+        if (isWhitelisted && sectionWhitelist) {
+          isWhitelisted = sectionWhitelist.has(p.code);
+        }
+        // 単機能V2H・トライブリッドV2Hではパワーコンディショナは追加行の候補から除外する
+        if (
+          (sectionType === '単機能V2H' || sectionType === 'トライブリッドV2H') &&
+          p.name === 'パワーコンディショナ'
+        ) {
+          isWhitelisted = false;
+        }
+        const isDeletedInSection = deletedCodes.has(p.code);
+        if (!isWhitelisted && !isDeletedInSection) continue;
+        if (seenCodes.has(p.code)) continue;
+        seenCodes.add(p.code);
+        candidateProducts.push(p);
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <select name="item_product_code" class="product-select" required>
+            <option value="">選択</option>
+            ${candidateProducts
+              .map(p => `<option value="${p.code}" data-price="${p.unit_price}" data-cost="${p.unit_cost}">${p.name}</option>`)
+              .join('')}
+          </select>
+        </td>
+        <td>
+          <select name="item_model_code" class="model-select">
+            <option value="">選択</option>
+          </select>
+          <input type="hidden" name="item_model_name" value="">
+        </td>
+        <td><input type="number" name="item_quantity" min="1" value="1" inputmode="numeric"></td>
+        <td><input type="number" name="item_unit_price" min="0" value="0" inputmode="numeric" readonly></td>
+        <td class="right"><span class="line-price">¥0</span></td>
+        <td>
+          <button type="button" class="btn danger btn-del">削除</button>
+          <input type="hidden" name="item_unit_cost" value="0">
+        </td>
+      `;
+      tr.setAttribute('draggable', 'true');
+      bodyEl.appendChild(tr);
+      bindRow(tr);
+      bindDrag(tr, bodyEl);
+      recalc();
+    }
+
+    function clearRows(bodyEl) {
+      bodyEl.innerHTML = "";
+    }
+
+    function bindDrag(tr, bodyEl) {
+      tr.addEventListener('dragstart', (e) => {
+        dragSrcRow = tr;
+        tr.classList.add('dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+        }
+      });
+      tr.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'move';
+        }
+      });
+      tr.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const target = tr;
+        if (!dragSrcRow || dragSrcRow === target) return;
+        const rect = target.getBoundingClientRect();
+        const offset = e.clientY - rect.top;
+        const placeAfter = offset > rect.height / 2;
+        if (placeAfter) {
+          bodyEl.insertBefore(dragSrcRow, target.nextSibling);
+        } else {
+          bodyEl.insertBefore(dragSrcRow, target);
+        }
+        recalc();
+      });
+      tr.addEventListener('dragend', () => {
+        tr.classList.remove('dragging');
+        dragSrcRow = null;
+      });
+    }
+
+    function getProductByCode(code) {
+      return productsRaw.find(p => p.code === code);
+    }
+
+    function setRowProductByName(tr, productName) {
+      const sel = tr.querySelector('.product-select');
+      const option = Array.from(sel.options).find(o => o.textContent === productName);
+      if (option) {
+        sel.value = option.value;
+        sel.dispatchEvent(new Event('change'));
+      }
+    }
+
+    function setRowProductByCode(tr, productCode) {
+      const sel = tr.querySelector('.product-select');
+      const option = Array.from(sel.options).find(o => o.value === productCode);
+      if (option) {
+        sel.value = productCode;
+        sel.dispatchEvent(new Event('change'));
+      }
+    }
+
+    function lockRowProduct(tr, productCode) {
+      const prod = getProductByCode(productCode);
+      if (!prod) return;
+      const cell = tr.querySelector('td');
+      const sel = tr.querySelector('.product-select');
+      const specialCodes = SPECIAL_PRODUCT_OPTIONS[productCode];
+      if (specialCodes) {
+        const html = specialCodes
+          .map(code => {
+            const altProd = getProductByCode(code);
+            if (!altProd) return '';
+            return `<option value="${altProd.code}" data-price="${altProd.unit_price||0}" data-cost="${altProd.unit_cost||0}">${altProd.name}</option>`;
+          })
+          .filter(Boolean)
+          .join('');
+        sel.innerHTML = html;
+        sel.disabled = false;
+        sel.value = productCode;
+        sel.dispatchEvent(new Event('change'));
+      } else {
+        // 単一選択肢にして変更不可にする
+        sel.innerHTML = `<option value="${prod.code}" data-price="${prod.unit_price||0}" data-cost="${prod.unit_cost||0}">${prod.name}</option>`;
+        sel.value = prod.code;
+        sel.dispatchEvent(new Event('change'));
+        sel.disabled = true;
+        // disabledは送信されないためhiddenを追加
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'item_product_code';
+        hidden.value = prod.code;
+        cell.appendChild(hidden);
+      }
+      if (LOCKED_CODES.has(productCode)) {
+        lockRowModel(tr);
+        lockRowQuantity(tr);
+      } else if (productCode === 'BAT-004') {
+        // 蓄電池ユニットは数量のみロック（型式は選択可能）
+        lockRowQuantity(tr);
+      } else if (productCode === 'SOL-003') {
+        // カラーモニターは数量1で固定
+        lockRowQuantity(tr);
+      } else if (productCode === 'V2H-010') {
+        // 単機能V2H用リモコンセットは数量1で固定（型式は選択可能）
+        lockRowQuantity(tr);
+      } else if (
+        productCode === 'BAT-001' || // パワーコンディショナ
+        productCode === 'BAT-002' || // 漏電遮断器
+        productCode === 'BAT-003' || // 配線用遮断器
+        productCode === 'BAT-005'    // 自動切替開閉器
+      ) {
+        // 蓄電池見積の対象機器は数量1で固定
+        lockRowQuantity(tr);
+      } else if (
+        productCode === 'V2H-001' || // V2H本体
+        productCode === 'V2H-002' || // 設置部材セット
+        productCode === 'V2H-003'    // 施工ケーブルセット
+      ) {
+        // 単機能V2H見積の対象機器は数量1で固定
+        lockRowQuantity(tr);
+      } else if (productCode === 'PWR-002') {
+        // パワコン交換：カラーモニターセットは数量1固定だが型式選択は可能
+        lockRowQuantity(tr);
+      } else if (
+        productCode === 'PWR-003' || // 設置工事費
+        productCode === 'PWR-004' || // 電気工事費（材料費込）
+        productCode === 'PWR-005' || // 運搬費・現場雑費
+        productCode === 'PWR-006'    // 事務手数料
+      ) {
+        // パワコン交換：これらは数量1 & 型式選択不可
+        lockRowModel(tr);
+        lockRowQuantity(tr);
+      } else if (productCode === 'RRI-001' || productCode === 'RRI-002' || productCode === 'RRI-003' || productCode === 'RRI-004') {
+        // 太陽光撤去工事・太陽光再設置工事・電気工事費(電材費込み)・架台費：型式選択不可・数量1固定
+        lockRowModel(tr);
+        lockRowQuantity(tr);
+      } else if (productCode === 'RRI-005') {
+        // 産業廃棄物処分費（太陽電池モジュール）：型式選択不可
+        lockRowModel(tr);
+      } else if (productCode === 'RRI-006') {
+        // 産業廃棄物処分費（パワーコンディショナ）：型式選択不可
+        lockRowModel(tr);
+      } else if (productCode === 'RRI-007') {
+        // 産業廃棄物処分費（架台）：型式選択不可・数量1固定
+        lockRowModel(tr);
+        lockRowQuantity(tr);
+      } else if (productCode === 'RRI-008') {
+        // 現場管理費：型式選択不可・数量1固定
+        lockRowModel(tr);
+        lockRowQuantity(tr);
+      } else if (productCode === 'RRI-009') {
+        // 安全対策費：数量1固定・型式選択肢を手動定義
+        const msel = tr.querySelector('.model-select');
+        const mnameInput = tr.querySelector('input[name="item_model_name"]');
+        if (msel) {
+          msel.disabled = false;
+          msel.innerHTML = `
+            <option value="">選択</option>
+            <option value="当社足場" data-name="当社足場">当社足場</option>
+            <option value="施主足場" data-name="施主足場">施主足場</option>
+            <option value="ローリングタワー" data-name="ローリングタワー">ローリングタワー</option>
+          `;
+          msel.value = "";
+          if (mnameInput) {
+            mnameInput.value = "";
+          }
+        }
+        lockRowQuantity(tr);
+      }
+      // 太陽光テンプレの特定行は削除不可 & ボタン非表示にする
+      if (NON_DELETABLE_SOLAR_CODES.has(productCode)) {
+        const delBtn = tr.querySelector('.btn-del');
+        if (delBtn) {
+          delBtn.remove();
+        }
+      }
+      // 蓄電池テンプレの特定行も削除不可 & ボタン非表示にする
+      if (NON_DELETABLE_BATTERY_CODES.has(productCode)) {
+        const delBtn = tr.querySelector('.btn-del');
+        if (delBtn) {
+          delBtn.remove();
+        }
+      }
+      // 単機能V2Hテンプレの全ての行も削除不可 & ボタン非表示にする
+      if (NON_DELETABLE_V2H_SINGLE_CODES.has(productCode)) {
+        const delBtn = tr.querySelector('.btn-del');
+        if (delBtn) {
+          delBtn.remove();
+        }
+      }
+      // トライブリッドV2HテンプレはV2Hポッド用ポール以外の行を削除不可 & ボタン非表示にする
+      if (NON_DELETABLE_V2H_HYBRID_CODES.has(productCode)) {
+        const delBtn = tr.querySelector('.btn-del');
+        if (delBtn) {
+          delBtn.remove();
+        }
+      }
+      // パワコン交換テンプレの特定行（PWR-001,003,004,005,006）も削除不可 & ボタン非表示にする
+      if (NON_DELETABLE_PWREX_CHANGE_CODES.has(productCode)) {
+        const delBtn = tr.querySelector('.btn-del');
+        if (delBtn) {
+          delBtn.remove();
+        }
+      }
+      // 撤去再設置テンプレの現場管理費・安全対策費も削除不可 & ボタン非表示にする
+      if (NON_DELETABLE_REINSTALL_CODES.has(productCode)) {
+        const delBtn = tr.querySelector('.btn-del');
+        if (delBtn) {
+          delBtn.remove();
+        }
+      }
+    }
+
+    function getRowProductCode(tr) {
+      const sel = tr.querySelector('.product-select');
+      if (sel && sel.value) {
+        return sel.value;
+      }
+      const hidden = tr.querySelector('input[type="hidden"][name="item_product_code"]');
+      return hidden ? hidden.value : '';
+    }
+
+    function getRowModelCode(tr) {
+      const sel = tr.querySelector('.model-select');
+      if (sel && sel.value) {
+        return sel.value;
+      }
+      const hidden = tr.querySelector('input[type="hidden"][name="item_model_code"]');
+      return hidden ? hidden.value : '';
+    }
+
+    function lockRowModel(tr) {
+      const msel = tr.querySelector('.model-select');
+      if (!msel) return;
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'item_model_code';
+      hidden.value = msel.value || '';
+      msel.parentElement.appendChild(hidden);
+      msel.innerHTML = '<option value=""></option>';
+      msel.value = '';
+      msel.disabled = true;
+    }
+
+    function lockRowQuantity(tr) {
+      const qty = tr.querySelector('input[name="item_quantity"]');
+      if (!qty) return;
+      qty.value = 1;
+      qty.readOnly = true;
+      qty.classList.add('locked-field');
+    }
+
+    function addWarrantyFeeRow(bodyEl) {
+      // 共通の「保証書発行手数料」行を追加（数量1固定・削除は可能）
+      createRow(bodyEl);
+      const lastRow = bodyEl.lastElementChild;
+      if (!lastRow) return;
+      lockRowProduct(lastRow, WARRANTY_FEE_PRODUCT_CODE);
+      lockRowQuantity(lastRow);
+      // 保証書発行手数料は型式選択も不要なため型式もロック
+      lockRowModel(lastRow);
+    }
+
+    function populateSolarTemplate(bodyEl) {
+      const solarItems = [
+        { code: "SOL-001", name: "太陽電池モジュール" },
+        { code: "SOL-002", name: "パワーコンディショナ" },
+        { code: "SOL-003", name: "カラーモニター" },
+        { code: "SOL-004", name: "漏電遮断器" },
+        { code: "SOL-005", name: "配線用遮断器" },
+        { code: "SOL-006", name: "接続ユニット" },
+        { code: "SOL-007", name: "取付架台" },
+        { code: "SOL-008", name: "設置工事費" },
+        { code: "SOL-009", name: "電気工事費" },
+        { code: "SOL-010", name: "事務手数料" },
+        { code: "SOL-011", name: "安全対策費" }
+      ];
+      clearRows(bodyEl);
+      solarItems.forEach(item => {
+        createRow(bodyEl);
+        const lastRow = bodyEl.lastElementChild;
+        lockRowProduct(lastRow, item.code);
+        // 太陽電池モジュール（SOL-001）は型式を既定選択し単価を反映
+        if (item.code === 'SOL-001') {
+          const msel = lastRow.querySelector('.model-select');
+          const targetCode = 'JKM450N-54HL4R-V';
+          const hasOption = Array.from(msel.options).some(o => o.value === targetCode);
+          if (hasOption) {
+            msel.value = targetCode;
+            msel.dispatchEvent(new Event('change'));
+          }
+        }
+      });
+      addWarrantyFeeRow(bodyEl);
+      recalc();
+    }
+
+    function populateBatteryTemplate(bodyEl) {
+      const batteryItems = [
+        { code: "BAT-001", name: "パワーコンディショナ" },
+        { code: "BAT-002", name: "漏電遮断器" },
+        { code: "BAT-003", name: "配線用遮断器" },
+        { code: "BAT-004", name: "蓄電池ユニット" },
+        { code: "BAT-005", name: "自動切替開閉器" },
+        { code: "BAT-006", name: "その他部材" },
+        { code: "BAT-007", name: "蓄電池設置工事費" }
+      ];
+      clearRows(bodyEl);
+      batteryItems.forEach(item => {
+        createRow(bodyEl);
+        const lastRow = bodyEl.lastElementChild;
+        lockRowProduct(lastRow, item.code);
+      });
+      recalc();
+    }
+
+    function populateV2hSingleTemplate(bodyEl) {
+      const v2hItems = [
+        { code: "V2H-001", name: "V2H本体" },
+        { code: "V2H-002", name: "設置部材セット" },
+        { code: "V2H-003", name: "施工ケーブルセット" },
+        { code: "V2H-004", name: "本体搬入費" },
+        { code: "V2H-005", name: "その他部材費" },
+        { code: "V2H-006", name: "電気工事労務費" },
+        { code: "V2H-007", name: "取付工事費" },
+        { code: "V2H-008", name: "現場雑費" },
+        { code: "V2H-009", name: "現場管理費" }
+      ];
+      clearRows(bodyEl);
+      v2hItems.forEach(item => {
+        createRow(bodyEl);
+        const lastRow = bodyEl.lastElementChild;
+        lockRowProduct(lastRow, item.code);
+      });
+      recalc();
+    }
+
+    function populateV2hHybridTemplate(bodyEl) {
+      const v2hItems = [
+        { code: "TVH-001", name: "V2H本体" },
+        { code: "TVH-002", name: "V2H通信ケーブル" },
+        { code: "TVH-003", name: "本体搬入費" },
+        { code: "TVH-004", name: "その他部材" },
+        { code: "TVH-005", name: "電気工事労務費" },
+        { code: "TVH-006", name: "取付工事費" },
+        { code: "TVH-007", name: "V2Hポッド用ポール" },
+        { code: "TVH-008", name: "現場雑費" },
+        { code: "TVH-009", name: "現場管理費" }
+      ];
+      clearRows(bodyEl);
+      v2hItems.forEach(item => {
+        createRow(bodyEl);
+        const lastRow = bodyEl.lastElementChild;
+        lockRowProduct(lastRow, item.code);
+        // トライブリッドV2Hのすべての項目の数量を1で固定
+        lockRowQuantity(lastRow);
+      });
+      recalc();
+    }
+
+    function populatePowerconTemplate(bodyEl) {
+      const pwrItems = [
+        { code: "PWR-001", name: "パワーコンディショナ" },
+        { code: "PWR-002", name: "カラーモニターセット" },
+        { code: "PWR-003", name: "設置工事費" },
+        { code: "PWR-004", name: "電気工事費（材料費込）" },
+        { code: "PWR-005", name: "運搬費・現場雑費" },
+        { code: "PWR-006", name: "事務手数料" }
+      ];
+      clearRows(bodyEl);
+      pwrItems.forEach(item => {
+        createRow(bodyEl);
+        const lastRow = bodyEl.lastElementChild;
+        lockRowProduct(lastRow, item.code);
+      });
+      addWarrantyFeeRow(bodyEl);
+      recalc();
+    }
+
+    function populateReinstallTemplate(bodyEl) {
+      const reinstallItems = [
+        { code: "RRI-001", name: "太陽光撤去工事" },
+        { code: "RRI-002", name: "太陽光再設置工事" },
+        { code: "RRI-003", name: "電気工事費(電材費込み)" },
+        { code: "RRI-004", name: "架台費" },
+        { code: "RRI-005", name: "産業廃棄物処分費（太陽電池モジュール）" },
+        { code: "RRI-006", name: "産業廃棄物処分費（パワーコンディショナ）" },
+        { code: "RRI-007", name: "産業廃棄物処分費（架台）" },
+        { code: "RRI-008", name: "現場管理費" },
+        { code: "RRI-009", name: "安全対策費" }
+      ];
+      clearRows(bodyEl);
+      reinstallItems.forEach(item => {
+        createRow(bodyEl);
+        const lastRow = bodyEl.lastElementChild;
+        lockRowProduct(lastRow, item.code);
+      });
+      recalc();
+    }
+
+    function bindRow(tr) {
+      const sel = tr.querySelector('.product-select');
+      const msel = tr.querySelector('.model-select');
+      const qty = tr.querySelector('input[name="item_quantity"]');
+      const up = tr.querySelector('input[name="item_unit_price"]');
+      const uc = tr.querySelector('input[name="item_unit_cost"]');
+      const mname = tr.querySelector('input[name="item_model_name"]');
+      const del = tr.querySelector('.btn-del');
+
+      sel.addEventListener('change', () => {
+        const opt = sel.options[sel.selectedIndex];
+        const price = Number(opt.getAttribute('data-price') || 0);
+        const cost = Number(opt.getAttribute('data-cost') || 0);
+        if (price) up.value = price;
+        if (cost) uc.value = cost;
+        // 型式プルダウンを商品に連動
+        const code = sel.value;
+        const models = modelsMap[code] || [];
+        msel.innerHTML = `<option value="">選択</option>` + models.map(m => `<option value="${m.code}" data-name="${m.name}" data-price="${m.unit_price||0}" data-cost="${m.unit_cost||0}">${m.name}</option>`).join('');
+        // 型式関連の値はリセット
+        msel.value = "";
+        mname.value = "";
+        if (LOCKED_CODES.has(code)) {
+          if (msel.options.length > 0) {
+            msel.options[0].textContent = "";
+          }
+          msel.disabled = true;
+          const hiddenModel = tr.querySelector('input[type="hidden"][name="item_model_code"]');
+          if (hiddenModel) hiddenModel.value = "";
+          lockRowQuantity(tr);
+        } else if (code === 'BAT-004') {
+          // 蓄電池ユニットは数量のみロック（型式は選択可能）
+          msel.disabled = false;
+          lockRowQuantity(tr);
+        } else if (
+          code === 'BAT-001' || // パワーコンディショナ
+          code === 'BAT-002' || // 漏電遮断器
+          code === 'BAT-003' || // 配線用遮断器
+          code === 'BAT-005'    // 自動切替開閉器
+        ) {
+          // 蓄電池見積の対象機器は数量1で固定
+          msel.disabled = false;
+          lockRowQuantity(tr);
+        } else if (
+          code === 'V2H-001' || // V2H本体
+          code === 'V2H-002' || // 設置部材セット
+          code === 'V2H-003'    // 施工ケーブルセット
+        ) {
+          // 単機能V2H見積の対象機器は数量1で固定
+          msel.disabled = false;
+          lockRowQuantity(tr);
+        } else {
+          msel.disabled = false;
+        }
+        recalc();
+      });
+
+      msel.addEventListener('change', () => {
+        const opt = msel.options[msel.selectedIndex];
+        const mprice = Number(opt.getAttribute('data-price') || 0);
+        const mcost = Number(opt.getAttribute('data-cost') || 0);
+        const mlabel = opt.getAttribute('data-name') || "";
+        if (mprice) up.value = mprice;
+        if (mcost) uc.value = mcost;
+        mname.value = mlabel;
+        recalc();
+      });
+
+      [qty, up].forEach(el => el.addEventListener('input', recalc));
+      del.addEventListener('click', () => {
+        // 削除された商品のコードをセクション単位で記録し、
+        // 次回「行を追加」時のプルダウンに再表示できるようにする
+        const section = tr.closest('.table-wrap');
+        const prodCode = getRowProductCode(tr);
+        if (section && prodCode) {
+          let set = deletedItemCodesBySection.get(section);
+          if (!set) {
+            set = new Set();
+            deletedItemCodesBySection.set(section, set);
+          }
+          set.add(prodCode);
+        }
+        tr.remove();
+        recalc();
+      });
+    }
+
+    function getAllRows() {
+      return Array.from(document.querySelectorAll('tbody.items-body tr'));
+    }
+
+    function recalc() {
+      const rows = getAllRows();
+      let totalCapacityKw = 0;
+      let totalModuleCount = 0;
+      rows.forEach(tr => {
+        const prodCode = getRowProductCode(tr);
+        if (prodCode === 'SOL-001') {
+          const qty = Number(tr.querySelector('input[name="item_quantity"]').value || 0);
+          const modelCode = getRowModelCode(tr);
+          const perKw = moduleCapacityMap[modelCode] || 0;
+          totalCapacityKw += perKw * qty;
+          totalModuleCount += qty;
+        }
+      });
+      // 撤去再設置見積の場合はシステム容量を手入力値で上書き（小数第3位まで）
+      if (isReinstallEstimate && systemCapacityInput && systemCapacityInput.value !== '') {
+        const manualCapacity = Number(systemCapacityInput.value);
+        if (!Number.isNaN(manualCapacity) && manualCapacity >= 0) {
+          totalCapacityKw = manualCapacity;
+        }
+      }
+
+      const rackUnitPrice = Math.round(totalCapacityKw * 18000);
+      const outsourcingValue = outsourcingInput ? Number(outsourcingInput.value || 0) : 0;
+      const safetyFee = Math.max(50000, Math.round(outsourcingValue * 1.3));
+
+      // 蓄電池ユニットの型式を取得（各セクションごと）
+      const batteryUnitModelMap = new Map();
+      rows.forEach(tr => {
+        const prodCode = getRowProductCode(tr);
+        if (prodCode === 'BAT-004') {
+          const modelCode = getRowModelCode(tr);
+          const section = tr.closest('.table-wrap');
+          if (section) {
+            batteryUnitModelMap.set(section, modelCode);
+          }
+        }
+      });
+
+      // 単機能V2Hの設置部材セットの型式を取得（各セクションごと）
+      const v2hMountingMaterialMap = new Map();
+      rows.forEach(tr => {
+        const prodCode = getRowProductCode(tr);
+        if (prodCode === 'V2H-002') {
+          const modelCode = getRowModelCode(tr);
+          const section = tr.closest('.table-wrap');
+          if (section) {
+            v2hMountingMaterialMap.set(section, modelCode);
+          }
+        }
+      });
+
+      // トライブリッドV2HのV2Hポッド用ポールの型式を取得（各セクションごと）
+      const tvhPodPoleMap = new Map();
+      rows.forEach(tr => {
+        const prodCode = getRowProductCode(tr);
+        if (prodCode === 'TVH-007') {
+          const modelCode = getRowModelCode(tr);
+          const section = tr.closest('.table-wrap');
+          if (section) {
+            tvhPodPoleMap.set(section, modelCode);
+          }
+        }
+      });
+
+      // パワコン交換のパワコン台数（各セクションごと）
+      const powerconCountMap = new Map();
+      const powerconIndoorCountMap = new Map();
+      const powerconOutdoorCountMap = new Map();
+      rows.forEach(tr => {
+        const prodCode = getRowProductCode(tr);
+        if (prodCode === 'PWR-001') {
+          const section = tr.closest('.table-wrap');
+          if (section) {
+            const sectionType = section.getAttribute('data-type');
+            if (sectionType === 'パワコン交換') {
+              const qtyInput = tr.querySelector('input[name="item_quantity"]');
+              const qty = Number(qtyInput ? qtyInput.value || 0 : 0);
+              const modelCode = getRowModelCode(tr) || '';
+              const current = powerconCountMap.get(section) || 0;
+              powerconCountMap.set(section, current + qty);
+              // 屋内・屋外の台数も集計
+              const isIndoor = modelCode.startsWith('SPUS-'); // SPUS-* を屋内用とみなす
+              if (isIndoor) {
+                const curIn = powerconIndoorCountMap.get(section) || 0;
+                powerconIndoorCountMap.set(section, curIn + qty);
+              } else if (modelCode) {
+                const curOut = powerconOutdoorCountMap.get(section) || 0;
+                powerconOutdoorCountMap.set(section, curOut + qty);
+              }
+            }
+          }
+        }
+      });
+
+      rows.forEach(tr => {
+        const prodCode = getRowProductCode(tr);
+        const upInput = tr.querySelector('input[name="item_unit_price"]');
+        const ucInput = tr.querySelector('input[name="item_unit_cost"]');
+        if (!upInput) return;
+        if (prodCode === 'SOL-007') {
+          // 取付架台：売価はシステム容量(kW) * 18000、原価はシステム容量(kW) * 6445
+          upInput.value = rackUnitPrice;
+          if (ucInput) {
+            ucInput.value = Math.round(totalCapacityKw * 6445);
+          }
+        } else if (prodCode === 'SOL-007R') {
+          // 取付架台（陸屋根）：売価はシステム容量(kW) * 60000、
+          // 原価はシステム容量(kW) * 6445 + モジュール枚数 * 1930 + モジュール枚数 * 1949
+          upInput.value = Math.round(totalCapacityKw * 60000);
+          if (ucInput) {
+            const baseCost = totalCapacityKw * 6445;
+            const moduleCost = totalModuleCount * (1930 + 1949);
+            ucInput.value = Math.round(baseCost + moduleCost);
+          }
+        } else if (prodCode === 'SOL-008') {
+          // 設置工事費：売価はシステム容量(kW) * 23000 + 180000
+          // 原価はシステム容量(kW)に応じた段階式
+          upInput.value = Math.round(totalCapacityKw * 23000 + 180000);
+          if (ucInput) {
+            let installCost = 0;
+            if (totalCapacityKw < 5) {
+              installCost = 100000;
+            } else if (totalCapacityKw < 7) {
+              installCost = 125000;
+            } else if (totalCapacityKw < 10) {
+              installCost = 150000;
+            } else if (totalCapacityKw < 15) {
+              installCost = 175000;
+            } else {
+              const overKw = totalCapacityKw - 15;
+              const steps = Math.floor(overKw / 2.5);
+              installCost = 175000 + steps * 25000;
+            }
+            ucInput.value = installCost;
+          }
+        } else if (prodCode === 'SOL-009') {
+          // 電気工事費：売価はシステム容量(kW) * 26000 + 120000
+          // 原価はシステム容量(kW) * 6857 + 20000 + パワコン1台につき25000
+          upInput.value = Math.round(totalCapacityKw * 26000 + 120000);
+          if (ucInput) {
+            let powerconCount = 0;
+            const section = tr.closest('.table-wrap');
+            if (section) {
+              const sectionRows = Array.from(section.querySelectorAll('tbody.items-body tr'));
+              sectionRows.forEach(r => {
+                if (getRowProductCode(r) === 'SOL-002') {
+                  const q = Number(r.querySelector('input[name="item_quantity"]').value || 0);
+                  powerconCount += q;
+                }
+              });
+            }
+            const baseCost = totalCapacityKw * 6857 + 20000;
+            const addCost = powerconCount * 25000;
+            ucInput.value = Math.round(baseCost + addCost);
+          }
+        } else if (prodCode === 'SOL-010') {
+          let fee = 0;
+          if (totalCapacityKw < 10) {
+            fee = 10000;
+          } else if (totalCapacityKw < 15) {
+            fee = 50000;
+          } else if (totalCapacityKw < 20) {
+            fee = 80000;
+          } else {
+            fee = 100000;
+          }
+          upInput.value = fee;
+        } else if (prodCode === 'SOL-011') {
+          // 安全対策費：売価は safetyFee、原価は safetyFee / 1.3
+          upInput.value = safetyFee;
+          if (ucInput) {
+            ucInput.value = Math.round(safetyFee / 1.3);
+          }
+        } else if (prodCode === 'BAT-006') {
+          // その他部材：蓄電池ユニットの型式に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          const batteryModel = batteryUnitModelMap.get(section) || '';
+          let otherMaterialPrice = 0;
+          if (batteryModel === 'ES-T3M1') {
+            otherMaterialPrice = 280000;
+          } else if (batteryModel === 'ESS-U4M1' || batteryModel === 'ESS-U4X1') {
+            otherMaterialPrice = 324000;
+          }
+          upInput.value = otherMaterialPrice;
+        } else if (prodCode === 'BAT-007') {
+          // 蓄電池設置工事費：蓄電池ユニットの型式に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          const batteryModel = batteryUnitModelMap.get(section) || '';
+          let installationPrice = 0;
+          if (batteryModel === 'ES-T3M1') {
+            installationPrice = 300000;
+          } else if (batteryModel === 'ESS-U4M1') {
+            installationPrice = 573000;
+          } else if (batteryModel === 'ESS-U4X1') {
+            installationPrice = 645000;
+          }
+          upInput.value = installationPrice;
+        } else if (prodCode === 'V2H-004') {
+          // 本体搬入費：固定金額
+          upInput.value = 50000;
+        } else if (prodCode === 'V2H-005') {
+          // その他部材費：固定金額
+          upInput.value = 50000;
+        } else if (prodCode === 'V2H-006') {
+          // 電気工事労務費：固定金額
+          upInput.value = 180000;
+        } else if (prodCode === 'V2H-008') {
+          // 現場雑費：固定金額
+          upInput.value = 30000;
+        } else if (prodCode === 'V2H-007') {
+          // 取付工事費：設置部材セットの型式に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          const mountingMaterialCode = v2hMountingMaterialMap.get(section) || '';
+          let installationPrice = 0;
+          if (mountingMaterialCode === 'VSG3-SBS01' || mountingMaterialCode === 'VSG3-SBS03') {
+            installationPrice = 200000;
+          } else if (mountingMaterialCode === 'VSG3-SBS02' || mountingMaterialCode === 'VSG3-SBS04') {
+            installationPrice = 350000;
+          }
+          upInput.value = installationPrice;
+        } else if (prodCode === 'V2H-009') {
+          // 現場管理費：固定金額
+          upInput.value = 20000;
+        } else if (prodCode === 'TVH-003') {
+          // 本体搬入費：固定金額
+          upInput.value = 50000;
+        } else if (prodCode === 'TVH-004') {
+          // その他部材：固定金額
+          upInput.value = 30000;
+        } else if (prodCode === 'TVH-005') {
+          // 電気工事労務費：固定金額
+          upInput.value = 100000;
+        } else if (prodCode === 'TVH-008') {
+          // 現場雑費：固定金額
+          upInput.value = 30000;
+        } else if (prodCode === 'TVH-006') {
+          // 取付工事費：V2Hポッド用ポールの型式に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          const podPoleCode = tvhPodPoleMap.get(section) || '';
+          let installationPrice = 150000;
+          if (podPoleCode === 'ES-T3H5') {
+            installationPrice = 300000;
+          }
+          upInput.value = installationPrice;
+        } else if (prodCode === 'TVH-009') {
+          // 現場管理費：固定金額
+          upInput.value = 20000;
+        } else if (prodCode === 'PWR-004') {
+          // パワコン交換の電気工事費（材料費込）：屋内/屋外パワコン台数に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          let indoorCount = 0;
+          let outdoorCount = 0;
+          if (section) {
+            indoorCount = powerconIndoorCountMap.get(section) || 0;
+            outdoorCount = powerconOutdoorCountMap.get(section) || 0;
+          }
+          let price = 0;
+          // 屋内用パワコン分
+          if (indoorCount > 0) {
+            if (indoorCount === 1 || indoorCount === 2) {
+              price += 60000;
+            } else if (indoorCount === 3) {
+              price += 100000;
+            } else if (indoorCount >= 4) {
+              price += 120000;
+            }
+          }
+          // 屋外用パワコン分
+          if (outdoorCount > 0) {
+            if (outdoorCount === 1) {
+              price += 110000;
+            } else if (outdoorCount === 2) {
+              price += 140000;
+            } else if (outdoorCount === 3) {
+              price += 160000;
+            } else if (outdoorCount >= 4) {
+              price += 180000;
+            }
+          }
+          upInput.value = price;
+        } else if (prodCode === 'PWR-005') {
+          // パワコン交換の運搬費・現場雑費：パワコン台数に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          let count = 0;
+          if (section) {
+            count = powerconCountMap.get(section) || 0;
+          }
+          let price = 0;
+          if (count <= 1) {
+            // 1台のとき
+            price = 35000;
+          } else if (count >= 2) {
+            // 2台以上のとき
+            price = 55000;
+          }
+          upInput.value = price;
+        } else if (prodCode === 'PWR-006') {
+          // パワコン交換の事務手数料：固定金額
+          upInput.value = 5000;
+        } else if (prodCode === 'PWR-003') {
+          // パワコン交換の設置工事費：屋内/屋外パワコン台数に応じて単価を設定
+          const section = tr.closest('.table-wrap');
+          let indoorCount = 0;
+          let outdoorCount = 0;
+          if (section) {
+            indoorCount = powerconIndoorCountMap.get(section) || 0;
+            outdoorCount = powerconOutdoorCountMap.get(section) || 0;
+          }
+          let installationPrice = 0;
+          // 屋内用パワコン分
+          if (indoorCount > 0) {
+            if (indoorCount === 1) {
+              installationPrice += 20000;
+            } else if (indoorCount === 2) {
+              installationPrice += 40000;
+            } else if (indoorCount === 3) {
+              installationPrice += 50000;
+            } else if (indoorCount >= 4) {
+              installationPrice += 60000;
+            }
+          }
+          // 屋外用パワコン分
+          if (outdoorCount > 0) {
+            if (outdoorCount === 1) {
+              installationPrice += 40000;
+            } else if (outdoorCount === 2) {
+              installationPrice += 60000;
+            } else if (outdoorCount === 3) {
+              installationPrice += 80000;
+            } else if (outdoorCount >= 4) {
+              installationPrice += 100000;
+            }
+          }
+          upInput.value = installationPrice;
+        } else if (prodCode === 'RRI-001') {
+          // 太陽光撤去工事：25000 + kW * 20000
+          upInput.value = Math.round(25000 + totalCapacityKw * 20000);
+        } else if (prodCode === 'RRI-002') {
+          // 太陽光再設置工事：25000 + kW * 25000
+          upInput.value = Math.round(25000 + totalCapacityKw * 25000);
+        } else if (prodCode === 'RRI-003') {
+          // 電気工事費(電材費込み)：システム容量(kW) * 12000
+          upInput.value = Math.round(totalCapacityKw * 12000);
+        } else if (prodCode === 'RRI-004') {
+          // 架台費：システム容量(kW) * 14000
+          upInput.value = Math.round(totalCapacityKw * 14000);
+        } else if (prodCode === 'RRI-005') {
+          // 産業廃棄物処分費（太陽電池モジュール）：1枚につき3000
+          upInput.value = 3000;
+        } else if (prodCode === 'RRI-006') {
+          // 産業廃棄物処分費（パワーコンディショナ）：1台につき10000
+          upInput.value = 10000;
+        } else if (prodCode === 'RRI-007') {
+          // 産業廃棄物処分費（架台）：システム容量(kW) * 2000
+          upInput.value = Math.round(totalCapacityKw * 2000);
+        } else if (prodCode === 'RRI-008') {
+          // 現場管理費：システム容量(kW) * 5000
+          upInput.value = Math.round(totalCapacityKw * 5000);
+        } else if (prodCode === 'RRI-009') {
+          // 安全対策費：型式に応じて金額を設定
+          const modelCode = getRowModelCode(tr);
+          let price = 0;
+          if (modelCode === '当社足場') {
+            // 当社足場：外注金額 * 1.3
+            price = Math.round(outsourcingValue * 1.3);
+          } else if (modelCode === '施主足場') {
+            price = 20000;
+          } else if (modelCode === 'ローリングタワー') {
+            price = 50000;
+          }
+          upInput.value = price;
+        }
+      });
+      if (systemCapacityEl) {
+        const decimals = isReinstallEstimate ? 3 : 2;
+        systemCapacityEl.textContent = `${totalCapacityKw.toFixed(decimals)} kW`;
+      }
+
+      let subtotalPrice = 0;
+      let subtotalCost = 0;
+      rows.forEach(tr => {
+        const qty = Number(tr.querySelector('input[name="item_quantity"]').value || 0);
+        const up = Number(tr.querySelector('input[name="item_unit_price"]').value || 0);
+        const uc = Number(tr.querySelector('input[name="item_unit_cost"]').value || 0);
+        const lp = qty * up;
+        const lc = qty * uc;
+        subtotalPrice += lp;
+        subtotalCost += lc;
+        tr.querySelector('.line-price').textContent = fmtYen(lp);
+      });
+      const subtotalEl = document.getElementById('subtotal-price');
+      if (subtotalEl) subtotalEl.textContent = fmtYen(subtotalPrice);
+
+      // 値引き・合計（画面表示用。粗利や原価などは表示しない）
+      const discountValue = discountInput ? Number(discountInput.value || 0) : 0;
+      const safeDiscount = Math.max(0, discountValue);
+      const totalPrice = Math.max(0, subtotalPrice - safeDiscount);
+      if (totalPriceEl) {
+        totalPriceEl.textContent = fmtYen(totalPrice);
+      }
+      // 合計(税込) = 合計(税抜) * (1 + TAX_RATE)
+      if (totalPriceTaxIncludedEl) {
+        const totalIncl = Math.round(totalPrice * (1 + TAX_RATE));
+        totalPriceTaxIncludedEl.textContent = fmtYen(totalIncl);
+      }
+    }
+
+    if (systemCapacityInput) {
+      systemCapacityInput.addEventListener('input', recalc);
+    }
+    if (discountInput) {
+      discountInput.addEventListener('input', recalc);
+    }
+
+    // セクション生成
+    function createSection(type, index) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      wrap.setAttribute('data-type', type);
+
+      const title = document.createElement('h2');
+      title.textContent = `見積詳細${index}（${type}）`;
+      sectionsEl.appendChild(title);
+
+      const table = document.createElement('table');
+      table.className = 'table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th style="min-width: 18rem;">商品</th>
+            <th style="min-width: 18rem;">型式</th>
+            <th>数量</th>
+            <th style="min-width: 5rem;">単価</th>
+            <th style="min-width: 7rem;">金額</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody class="items-body"></tbody>
+      `;
+      wrap.appendChild(table);
+
+      const bodyEl = table.querySelector('tbody.items-body');
+
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'btn';
+      add.textContent = '行を追加';
+      add.addEventListener('click', () => createRow(bodyEl));
+
+      sectionsEl.appendChild(wrap);
+      sectionsEl.appendChild(add);
+
+      // 外注金額入力欄：太陽光 or 撤去再設置がある場合、そのセクション直下に配置
+      if (type === '太陽光' || type === '撤去再設置') {
+        ensureOutsourcingField(add, type);
+      }
+
+      // テンプレ適用
+      if (type === '太陽光') populateSolarTemplate(bodyEl);
+      else if (type === '蓄電池') populateBatteryTemplate(bodyEl);
+      else if (type === '単機能V2H') populateV2hSingleTemplate(bodyEl);
+      else if (type === 'トライブリッドV2H') populateV2hHybridTemplate(bodyEl);
+      else if (type === 'パワコン交換') populatePowerconTemplate(bodyEl);
+      else if (type === '撤去再設置') populateReinstallTemplate(bodyEl);
+      else {
+        createRow(bodyEl);
+        addWarrantyFeeRow(bodyEl);
+      }
+    }
+
+    function removeSection(type) {
+      // h2 と table-wrap, その後の追加ボタンをまとめて削除
+      const wrap = sectionsEl.querySelector(`.table-wrap[data-type="${type}"]`);
+      if (!wrap) return;
+      const title = wrap.previousElementSibling;
+      const addBtn = wrap.nextElementSibling;
+      if (title && title.tagName === 'H2') title.remove();
+      if (addBtn && addBtn.classList.contains('btn')) addBtn.remove();
+      wrap.remove();
+      renumberSectionTitles();
+      recalc();
+    }
+
+    function renumberSectionTitles() {
+      const titles = sectionsEl.querySelectorAll('h2');
+      let idx = 1;
+      titles.forEach(t => {
+        const type = t.textContent.replace(/^見積詳細\d+（(.+)）$/, '$1');
+        t.textContent = `見積詳細${idx}（${type}）`;
+        idx += 1;
+      });
+    }
+
+    // タイプ変更でセクションの追加/削除
+    if (typeGroup) {
+      typeGroup.addEventListener('change', (e) => {
+        const t = e.target;
+        if (!(t && t.name === 'estimate_type')) return;
+        if (t.checked) {
+          const existing = sectionsEl.querySelector(`.table-wrap[data-type="${t.value}"]`);
+          if (!existing) {
+            const index = sectionsEl.querySelectorAll('.table-wrap').length + 1;
+            createSection(t.value, index);
+          }
+        } else {
+          removeSection(t.value);
+        }
+      });
+    }
+
+    // 初期表示：複数タイプ優先、なければ単一、どちらもなければ空のセクション1つ
+    if (Array.isArray(selectedTypes) && selectedTypes.length > 0) {
+      selectedTypes.forEach((t, i) => createSection(t, i + 1));
+    } else if (selectedType) {
+      createSection(selectedType, 1);
+    } else {
+      createSection('その他工事', 1);
+    }
+  </script>
+{% endblock %}

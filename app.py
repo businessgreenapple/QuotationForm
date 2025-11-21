@@ -215,7 +215,7 @@ def estimate_create():
                 unit_cost=unit_cost,
                 line_total_price=line_total_price,
                 line_total_cost=line_total_cost,
-            )
+        )
         )
 
     # ---- 太陽光 電気工事費（SOL-009）の原価を「電材費」「電気工事費」に分けてバックエンドで計算 ----
@@ -245,6 +245,41 @@ def estimate_create():
                 it.unit_cost = total_electric_cost_unit
                 # 数量は通常 1 だが、念のため数量を掛けて行原価を再計算
                 it.line_total_cost = float(it.quantity or 0) * total_electric_cost_unit
+
+    # ---- 蓄電池：その他部材（BAT-006）の原価を蓄電池ユニット型式からバックエンドで計算 ----
+    battery_unit_model_code = None
+    for it in items:
+        if it.product_code == 'BAT-004':
+            battery_unit_model_code = (it.model_code or '').strip()
+            if battery_unit_model_code:
+                break
+
+    if battery_unit_model_code:
+        other_material_cost = 0.0
+        installation_cost = 0.0
+        if battery_unit_model_code == 'ES-T3M1':
+            other_material_cost = 152787.0
+            installation_cost = 125000.0
+        elif battery_unit_model_code in ('ESS-U4M1', 'ESS-U4X1'):
+            other_material_cost = 189700.0
+            if battery_unit_model_code == 'ESS-U4M1':
+                installation_cost = 190885.0
+            elif battery_unit_model_code == 'ESS-U4X1':
+                installation_cost = 220082.0
+
+        if other_material_cost > 0:
+            for it in items:
+                if it.product_code == 'BAT-006':
+                    it.unit_cost = other_material_cost
+                    # 数量は通常 1 だが、念のため数量を掛けて行原価を再計算
+                    it.line_total_cost = float(it.quantity or 0) * other_material_cost
+
+        if installation_cost > 0:
+            for it in items:
+                if it.product_code == 'BAT-007':
+                    it.unit_cost = installation_cost
+                    # 数量は通常 1 だが、念のため数量を掛けて行原価を再計算
+                    it.line_total_cost = float(it.quantity or 0) * installation_cost
 
     if not items:
         flash('1件以上の商品を追加してください。', 'error')
@@ -341,6 +376,21 @@ def estimate_detail(estimate_id: int):
             electric_material_cost_unit = float(system_capacity_kw) * 6857.0 + 20000.0
             # 行数（数量）を掛けて全体の電材費を算出
             material_cost += electric_material_cost_unit * float(electric_line_qty)
+
+    # --- 材料費（蓄電池）の算出 ---
+    # 対象：パワーコンディショナ、漏電遮断器、配線用遮断器、蓄電池ユニット、
+    #       自動切替開閉器、その他部材
+    BATTERY_MATERIAL_PRODUCT_CODES = {
+        'BAT-001',  # パワーコンディショナ
+        'BAT-002',  # 漏電遮断器
+        'BAT-003',  # 配線用遮断器
+        'BAT-004',  # 蓄電池ユニット
+        'BAT-005',  # 自動切替開閉器
+        'BAT-006',  # その他部材
+    }
+    for it in est.items:
+        if it.product_code in BATTERY_MATERIAL_PRODUCT_CODES:
+            material_cost += float(it.line_total_cost or 0.0)
 
     return render_template('estimate_detail.html', estimate=est, material_cost=material_cost)
 

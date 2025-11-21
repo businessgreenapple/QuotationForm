@@ -28,7 +28,7 @@
     },
     {
       "code": "ES-T3",
-      "name": "ES-T3（ニチコン屋外マルチ）",
+      "name": "ES-T3（ニチコントライブリッド）",
       "unit_price": 600000,
       "unit_cost": 381200.0
     }
@@ -116,7 +116,7 @@
   "BAT-001": [
     {
       "code": "ES-T3",
-      "name": "ES-T3（ニチコン）",
+      "name": "ES-T3（ニチコントライブリッド）",
       "unit_price": 600000,
       "unit_cost": 381200.0
     }
@@ -182,19 +182,19 @@
   "BAT-004": [
     {
       "code": "ES-T3M1",
-      "name": "ES-T3M1（7.4kWh）",
+      "name": "ES-T3M1（トライブリッド、7.4kWh）",
       "unit_price": 900000,
       "unit_cost": 519400.0
     },
     {
       "code": "ESS-U4M1",
-      "name": "ESS-U4M1（11.1kWh）",
+      "name": "ESS-U4M1（単機能、11.1kWh）",
       "unit_price": 1477000,
       "unit_cost": 977000.0
     },
     {
       "code": "ESS-U4X1",
-      "name": "ESS-U4X1（16.6kWh）",
+      "name": "ESS-U4X1（単機能、16.6kWh）",
       "unit_price": 2004000,
       "unit_cost": 1334000.0
     }

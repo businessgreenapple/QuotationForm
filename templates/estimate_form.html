@@ -972,7 +972,7 @@
             ucInput.value = Math.round(safetyFee / 1.3);
           }
         } else if (prodCode === 'BAT-006') {
-          // その他部材：蓄電池ユニットの型式に応じて単価を設定
+          // その他部材：蓄電池ユニットの型式に応じて売価・原価を設定
           const section = tr.closest('.table-wrap');
           const batteryModel = batteryUnitModelMap.get(section) || '';
           let otherMaterialPrice = 0;
@@ -982,8 +982,17 @@
             otherMaterialPrice = 324000;
           }
           upInput.value = otherMaterialPrice;
+          if (ucInput) {
+            let otherMaterialCost = 0;
+            if (batteryModel === 'ES-T3M1') {
+              otherMaterialCost = 152787;
+            } else if (batteryModel === 'ESS-U4M1' || batteryModel === 'ESS-U4X1') {
+              otherMaterialCost = 189700;
+            }
+            ucInput.value = otherMaterialCost;
+          }
         } else if (prodCode === 'BAT-007') {
-          // 蓄電池設置工事費：蓄電池ユニットの型式に応じて単価を設定
+          // 蓄電池設置工事費：蓄電池ユニットの型式に応じて売価・原価を設定
           const section = tr.closest('.table-wrap');
           const batteryModel = batteryUnitModelMap.get(section) || '';
           let installationPrice = 0;
@@ -995,6 +1004,17 @@
             installationPrice = 645000;
           }
           upInput.value = installationPrice;
+          if (ucInput) {
+            let installationCost = 0;
+            if (batteryModel === 'ES-T3M1') {
+            installationCost = 125000;
+            } else if (batteryModel === 'ESS-U4M1') {
+              installationCost = 190885;
+            } else if (batteryModel === 'ESS-U4X1') {
+              installationCost = 220082;
+            }
+            ucInput.value = installationCost;
+          }
         } else if (prodCode === 'V2H-004') {
           // 本体搬入費：固定金額
           upInput.value = 50000;

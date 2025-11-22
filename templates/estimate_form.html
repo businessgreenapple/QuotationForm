@@ -35,6 +35,7 @@
       </div>
     </div>
 
+    {% if (selected_types and ('太陽光' in selected_types or '撤去再設置' in selected_types)) or selected_type == '太陽光' or selected_type == '撤去再設置' %}
     <div class="system-capacity-banner">
       システム容量：<span id="system-capacity">0.00 kW</span>
       {% if (selected_types and '撤去再設置' in selected_types) or selected_type == '撤去再設置' %}
@@ -49,35 +50,87 @@
       >
       {% endif %}
     </div>
+    {% endif %}
     <!-- 複数タイプに対応したセクションの動的コンテナ -->
     <div id="sections"></div>
 
-    <!-- 小計セクション -->
-    <div class="totals">
-      <div>小計(税抜)：<span id="subtotal-price">¥0</span></div>
-    </div>
+    <!-- 金額サマリ & 利益サマリ（新規見積画面用） -->
+    <div class="totals-layout">
+      {% if session.get('is_admin_mode') %}
+      <div class="totals-card totals-card-profit">
+        <h3>利益サマリ</h3>
+        <div class="totals-row-item">
+          <span class="label">⑤ 材料費（⑤/③）</span>
+          <span class="value">
+            <span id="ps-material-amount">¥0</span>
+            （<span id="ps-material-rate">0.00</span>%）
+          </span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">⑥ 原価（⑥/③+①*0.07）</span>
+          <span class="value">
+            <span id="ps-cost-amount">¥0</span>
+            （<span id="ps-cost-rate">0.00</span>%）
+          </span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">⑦ 粗利（③-⑥）</span>
+          <span class="value">
+            <span id="ps-gross-amount">¥0</span>
+            （<span id="ps-gross-rate">0.00</span>%）
+          </span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">⑧ 販管費（①*0.2）</span>
+          <span class="value">
+            <span id="ps-selling-amount">¥0</span>
+            （<span id="ps-selling-rate">0.00</span>%）
+          </span>
+        </div>
+        <div class="totals-row-item highlight">
+          <span class="label">⑨ 営業利益（⑦-⑧）</span>
+          <span class="value">
+            <span id="ps-operating-amount">¥0</span>
+            （<span id="ps-operating-rate">0.00</span>%）
+          </span>
+        </div>
+      </div>
+      {% endif %}
 
-    <!-- 値引セクション（税抜） -->
-    <div class="totals">
-      <label for="discount-amount">値引（税抜）</label>
-      <input
-        type="number"
-        id="discount-amount"
-        name="discount_amount"
-        min="0"
-        value="0"
-        inputmode="numeric"
-      >
-    </div>
-
-    <!-- 合計セクション（値引後・税抜） -->
-    <div class="totals">
-      <div>合計(税抜)：<span id="total-price">¥0</span></div>
-    </div>
-
-    <!-- 合計セクション（値引後・税込） -->
-    <div class="totals totals-tax-included">
-      <div class="total-tax-included">合計(税込)：<span id="total-price-tax-included">¥0</span></div>
+      <div class="totals-summary-wrapper{% if not session.get('is_admin_mode') %} single-right{% endif %}">
+        <div class="totals-card totals-card-summary">
+          <h3>金額サマリ</h3>
+          <div class="totals-row-item">
+            <span class="label">① 小計(税抜)</span>
+            <span class="value" id="subtotal-price">¥0</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">② 値引(税抜)</span>
+            <span class="value">
+              <input
+                type="number"
+                id="discount-amount"
+                name="discount_amount"
+                min="0"
+                value="0"
+                inputmode="numeric"
+              >
+            </span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">　 値引率</span>
+            <span class="value" id="discount-rate">0.00%</span>
+          </div>
+          <div class="totals-row-item">
+            <span class="label">③ 合計(税抜)</span>
+            <span class="value" id="total-price">¥0</span>
+          </div>
+          <div class="totals-row-item highlight">
+            <span class="label">④ 合計(税込)</span>
+            <span class="value" id="total-price-tax-included">¥0</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="actions">
@@ -89,6 +142,7 @@
   <script>
     const selectedTypes = {{ (selected_types or []) | tojson }};
     const selectedType = "{{ selected_type }}"; // 後方互換（単一指定）
+    const isAdminMode = {{ is_admin_mode | tojson }};
     const productsRaw = [
       {% for p in products %}
         { code: "{{ p.code }}", name: "{{ p.name }}", unit_price: {{ p.unit_price|int }}, unit_cost: {{ p.unit_cost|int }} }{{ "," if not loop.last }}
@@ -106,6 +160,42 @@
     })();
     const modelsMap = {{ models | tojson }};
 
+    // 材料費判定用の商品コードセット（見積詳細画面のロジックと対応）
+    const MATERIAL_PRODUCT_CODES = new Set([
+      'SOL-001', // 太陽電池モジュール
+      'SOL-002', // パワーコンディショナ
+      'SOL-003', // カラーモニター
+      'SOL-004', // 漏電遮断器
+      'SOL-005', // 配線用遮断器
+      'SOL-006', // 接続ユニット
+      'SOL-007', // 取付架台
+      'SOL-007R', // 取付架台（陸屋根）
+    ]);
+    const BATTERY_MATERIAL_PRODUCT_CODES = new Set([
+      'BAT-001', // パワーコンディショナ
+      'BAT-002', // 漏電遮断器
+      'BAT-003', // 配線用遮断器
+      'BAT-004', // 蓄電池ユニット
+      'BAT-005', // 自動切替開閉器
+      'BAT-006', // その他部材
+    ]);
+    const V2H_SINGLE_MATERIAL_PRODUCT_CODES = new Set([
+      'V2H-001', // V2H本体
+      'V2H-002', // 設置部材セット
+      'V2H-003', // 施工ケーブルセット
+      'V2H-005', // その他部材費
+      'V2H-010', // リモコンセット
+      'V2H-011', // ケーブルカバー
+      'V2H-012', // AC_CTケーブルセット
+      'V2H-013', // CTセンサ（内径θ24）
+    ]);
+    const V2H_HYBRID_MATERIAL_PRODUCT_CODES = new Set([
+      'TVH-001', // V2H本体
+      'TVH-002', // V2H通信ケーブル
+      'TVH-004', // その他部材
+      'TVH-007', // V2Hポッド用ポール
+    ]);
+
     const sectionsEl = document.getElementById('sections');
     const typeGroup = document.getElementById('estimate-type-group');
     const systemCapacityEl = document.getElementById('system-capacity');
@@ -113,6 +203,17 @@
     const discountInput = document.getElementById('discount-amount');
     const totalPriceEl = document.getElementById('total-price');
     const totalPriceTaxIncludedEl = document.getElementById('total-price-tax-included');
+    // 利益サマリ用 要素
+    const psMaterialAmountEl = document.getElementById('ps-material-amount');
+    const psMaterialRateEl = document.getElementById('ps-material-rate');
+    const psCostAmountEl = document.getElementById('ps-cost-amount');
+    const psCostRateEl = document.getElementById('ps-cost-rate');
+    const psGrossAmountEl = document.getElementById('ps-gross-amount');
+    const psGrossRateEl = document.getElementById('ps-gross-rate');
+    const psSellingAmountEl = document.getElementById('ps-selling-amount');
+    const psSellingRateEl = document.getElementById('ps-selling-rate');
+    const psOperatingAmountEl = document.getElementById('ps-operating-amount');
+    const psOperatingRateEl = document.getElementById('ps-operating-rate');
 
     // 消費税率（例：10%）
     const TAX_RATE = 0.10;
@@ -266,6 +367,13 @@
         if (
           (sectionType === '単機能V2H' || sectionType === 'トライブリッドV2H') &&
           p.name === 'パワーコンディショナ'
+        ) {
+          isWhitelisted = false;
+        }
+        // トライブリッドV2Hでは単機能V2H専用商品（リモコンセット、ケーブルカバー、AC_CTケーブルセット、CTセンサ）を追加行の候補から除外する
+        if (
+          sectionType === 'トライブリッドV2H' &&
+          (p.code === 'V2H-010' || p.code === 'V2H-011' || p.code === 'V2H-012' || p.code === 'V2H-013')
         ) {
           isWhitelisted = false;
         }
@@ -935,23 +1043,11 @@
           }
         } else if (prodCode === 'SOL-009') {
           // 電気工事費：売価はシステム容量(kW) * 26000 + 120000
-          // 原価はシステム容量(kW) * 6857 + 20000 + パワコン1台につき25000
+          // 原価はシステム容量(kW) * 6857 + 20000
           upInput.value = Math.round(totalCapacityKw * 26000 + 120000);
           if (ucInput) {
-            let powerconCount = 0;
-            const section = tr.closest('.table-wrap');
-            if (section) {
-              const sectionRows = Array.from(section.querySelectorAll('tbody.items-body tr'));
-              sectionRows.forEach(r => {
-                if (getRowProductCode(r) === 'SOL-002') {
-                  const q = Number(r.querySelector('input[name="item_quantity"]').value || 0);
-                  powerconCount += q;
-                }
-              });
-            }
             const baseCost = totalCapacityKw * 6857 + 20000;
-            const addCost = powerconCount * 25000;
-            ucInput.value = Math.round(baseCost + addCost);
+            ucInput.value = Math.round(baseCost);
           }
         } else if (prodCode === 'SOL-010') {
           let fee = 0;
@@ -1016,63 +1112,108 @@
             ucInput.value = installationCost;
           }
         } else if (prodCode === 'V2H-004') {
-          // 本体搬入費：固定金額
+          // 本体搬入費：売価は固定金額、原価は 10,000 円
           upInput.value = 50000;
+          if (ucInput) {
+            ucInput.value = 10000;
+          }
         } else if (prodCode === 'V2H-005') {
-          // その他部材費：固定金額
+          // その他部材費：売価は固定金額、原価は 25,000 円
           upInput.value = 50000;
+          if (ucInput) {
+            ucInput.value = 25000;
+          }
         } else if (prodCode === 'V2H-006') {
-          // 電気工事労務費：固定金額
+          // 電気工事労務費：売価は固定金額、原価は 100,000 円
           upInput.value = 180000;
+          if (ucInput) {
+            ucInput.value = 100000;
+          }
         } else if (prodCode === 'V2H-008') {
-          // 現場雑費：固定金額
+          // 現場雑費：売価は固定金額、原価は 10,000 円
           upInput.value = 30000;
+          if (ucInput) {
+            ucInput.value = 10000;
+          }
         } else if (prodCode === 'V2H-007') {
-          // 取付工事費：設置部材セットの型式に応じて単価を設定
+          // 取付工事費：設置部材セットの型式に応じて売価・原価を設定
           const section = tr.closest('.table-wrap');
           const mountingMaterialCode = v2hMountingMaterialMap.get(section) || '';
           let installationPrice = 0;
+          let installationCost = 0;
+          // 設置部材１ or ３（VSG3-SBS01 / VSG3-SBS03）
           if (mountingMaterialCode === 'VSG3-SBS01' || mountingMaterialCode === 'VSG3-SBS03') {
             installationPrice = 200000;
+            installationCost = 50000;
+          // 設置部材２ or ４（VSG3-SBS02 / VSG3-SBS04）
           } else if (mountingMaterialCode === 'VSG3-SBS02' || mountingMaterialCode === 'VSG3-SBS04') {
             installationPrice = 350000;
+            installationCost = 100000;
           }
           upInput.value = installationPrice;
+          if (ucInput) {
+            ucInput.value = installationCost;
+          }
         } else if (prodCode === 'V2H-009') {
-          // 現場管理費：固定金額
+          // 現場管理費：売価は固定金額、原価は 5,000 円
           upInput.value = 20000;
+          if (ucInput) {
+            ucInput.value = 5000;
+          }
         } else if (prodCode === 'TVH-003') {
-          // 本体搬入費：固定金額
+          // 本体搬入費：固定金額、原価は 10,000 円
           upInput.value = 50000;
+          if (ucInput) {
+            ucInput.value = 10000;
+          }
         } else if (prodCode === 'TVH-004') {
-          // その他部材：固定金額
+          // その他部材：固定金額、原価は 15,000 円
           upInput.value = 30000;
+          if (ucInput) {
+            ucInput.value = 15000;
+          }
         } else if (prodCode === 'TVH-005') {
-          // 電気工事労務費：固定金額
+          // 電気工事労務費：固定金額、原価は 50,000 円
           upInput.value = 100000;
+          if (ucInput) {
+            ucInput.value = 50000;
+          }
         } else if (prodCode === 'TVH-008') {
-          // 現場雑費：固定金額
+          // 現場雑費：固定金額、原価は 10,000 円
           upInput.value = 30000;
+          if (ucInput) {
+            ucInput.value = 10000;
+          }
         } else if (prodCode === 'TVH-006') {
-          // 取付工事費：V2Hポッド用ポールの型式に応じて単価を設定
+          // 取付工事費：V2Hポッド用ポールの型式に応じて単価・原価を設定
           const section = tr.closest('.table-wrap');
           const podPoleCode = tvhPodPoleMap.get(section) || '';
           let installationPrice = 150000;
+          let installationCost = 100000;
           if (podPoleCode === 'ES-T3H5') {
             installationPrice = 300000;
+            installationCost = 200000;
           }
           upInput.value = installationPrice;
+          if (ucInput) {
+            ucInput.value = installationCost;
+          }
         } else if (prodCode === 'TVH-009') {
-          // 現場管理費：固定金額
+          // 現場管理費：固定金額、原価は 5,000 円
           upInput.value = 20000;
+          if (ucInput) {
+            ucInput.value = 5000;
+          }
         } else if (prodCode === 'PWR-004') {
           // パワコン交換の電気工事費（材料費込）：屋内/屋外パワコン台数に応じて単価を設定
           const section = tr.closest('.table-wrap');
           let indoorCount = 0;
           let outdoorCount = 0;
+          let totalCount = 0;
           if (section) {
             indoorCount = powerconIndoorCountMap.get(section) || 0;
             outdoorCount = powerconOutdoorCountMap.get(section) || 0;
+            totalCount = powerconCountMap.get(section) || 0;
           }
           let price = 0;
           // 屋内用パワコン分
@@ -1098,6 +1239,10 @@
             }
           }
           upInput.value = price;
+          // 原価：パワコン1台につき30000（電気工事25000 + 材料費5000）
+          if (ucInput) {
+            ucInput.value = totalCount * 30000;
+          }
         } else if (prodCode === 'PWR-005') {
           // パワコン交換の運搬費・現場雑費：パワコン台数に応じて単価を設定
           const section = tr.closest('.table-wrap');
@@ -1114,6 +1259,10 @@
             price = 55000;
           }
           upInput.value = price;
+          // 原価：パワコン1台につき10000
+          if (ucInput) {
+            ucInput.value = count * 10000;
+          }
         } else if (prodCode === 'PWR-006') {
           // パワコン交換の事務手数料：固定金額
           upInput.value = 5000;
@@ -1122,9 +1271,11 @@
           const section = tr.closest('.table-wrap');
           let indoorCount = 0;
           let outdoorCount = 0;
+          let totalCount = 0;
           if (section) {
             indoorCount = powerconIndoorCountMap.get(section) || 0;
             outdoorCount = powerconOutdoorCountMap.get(section) || 0;
+            totalCount = powerconCountMap.get(section) || 0;
           }
           let installationPrice = 0;
           // 屋内用パワコン分
@@ -1152,6 +1303,10 @@
             }
           }
           upInput.value = installationPrice;
+          // 原価：パワコン1台につき10600
+          if (ucInput) {
+            ucInput.value = totalCount * 10600;
+          }
         } else if (prodCode === 'RRI-001') {
           // 太陽光撤去工事：25000 + kW * 20000
           upInput.value = Math.round(25000 + totalCapacityKw * 20000);
@@ -1211,8 +1366,31 @@
       const subtotalEl = document.getElementById('subtotal-price');
       if (subtotalEl) subtotalEl.textContent = fmtYen(subtotalPrice);
 
-      // 値引き・合計（画面表示用。粗利や原価などは表示しない）
-      const discountValue = discountInput ? Number(discountInput.value || 0) : 0;
+      // 値引き・合計
+      let discountValue = discountInput ? Number(discountInput.value || 0) : 0;
+      
+      // 一般モードでは値引き額の上限を小計の5%に制限
+      if (!isAdminMode) {
+        const maxDiscount = Math.floor(subtotalPrice * 0.05);
+        if (discountValue > maxDiscount) {
+          discountValue = maxDiscount;
+          if (discountInput) {
+            discountInput.value = maxDiscount;
+            // ユーザーへのフィードバックとしてアラートを出すか、あるいはサイレントに修正するか
+            // ここではサイレント修正とするが、必要に応じてUI表示を追加可能
+          }
+        }
+        // 入力欄にも上限属性を設定（UX向上）
+        if (discountInput) {
+          discountInput.max = maxDiscount;
+        }
+      } else {
+        // 管理モードなら上限解除
+        if (discountInput) {
+          discountInput.removeAttribute('max');
+        }
+      }
+
       const safeDiscount = Math.max(0, discountValue);
       const totalPrice = Math.max(0, subtotalPrice - safeDiscount);
       if (totalPriceEl) {
@@ -1222,6 +1400,95 @@
       if (totalPriceTaxIncludedEl) {
         const totalIncl = Math.round(totalPrice * (1 + TAX_RATE));
         totalPriceTaxIncludedEl.textContent = fmtYen(totalIncl);
+      }
+      // 値引率（① 小計(税抜) を分母）
+      const discountRate = subtotalPrice > 0 ? (safeDiscount / subtotalPrice) * 100 : 0;
+      const discountRateEl = document.getElementById('discount-rate');
+      if (discountRateEl) {
+        discountRateEl.textContent = `${discountRate.toFixed(2)}%`;
+      }
+
+      // 利益サマリ（見積詳細画面と同じロジック）
+      // ⑤ 材料費：太陽光・蓄電池・単機能V2H・トライブリッドV2Hの部材＋電気工事費(SOL-009)の原価
+      let materialCost = 0;
+      rows.forEach(tr => {
+        const code = getRowProductCode(tr);
+        const qty = Number(tr.querySelector('input[name="item_quantity"]').value || 0);
+        const uc = Number(tr.querySelector('input[name="item_unit_cost"]').value || 0);
+        const lc = qty * uc;
+        if (
+          MATERIAL_PRODUCT_CODES.has(code) ||
+          BATTERY_MATERIAL_PRODUCT_CODES.has(code) ||
+          V2H_SINGLE_MATERIAL_PRODUCT_CODES.has(code) ||
+          V2H_HYBRID_MATERIAL_PRODUCT_CODES.has(code) ||
+          code === 'SOL-009' ||
+          code === 'PWR-001'  // パワコン交換：パワーコンディショナ
+        ) {
+          materialCost += lc;
+        }
+      });
+
+      // パワコン交換の材料費：設置工事費（PWR-003）の材料部分と電気工事費（材料費込）（PWR-004）の材料部分
+      // パワコン台数を集計（全セクション合計）
+      let totalPowerconExchangeCount = 0;
+      powerconCountMap.forEach(count => {
+        totalPowerconExchangeCount += count;
+      });
+      if (totalPowerconExchangeCount > 0) {
+        // 設置工事費の材料部分：パワコン1台につき10600円
+        materialCost += totalPowerconExchangeCount * 10600;
+        // 電気工事費（材料費込）の材料部分：パワコン1台につき5000円
+        materialCost += totalPowerconExchangeCount * 5000;
+      }
+
+      // 「その他」原価：① 小計(税抜) × 0.07
+      const otherCost = subtotalPrice * 0.07;
+      const totalCost = subtotalCost + otherCost;
+
+      // 粗利・販管費・営業利益
+      const grossProfit = totalPrice - totalCost;
+      const sellingExpense = subtotalPrice * 0.2;
+      const operatingProfit = grossProfit - sellingExpense;
+
+      // 各種率（見積詳細と同様に③ 合計(税抜)を分母とする）
+      const materialRate = totalPrice > 0 ? (materialCost / totalPrice) * 100 : 0;
+      // 原価率は③+①*0.07を分母とする
+      const costRateDenominator = totalPrice + subtotalPrice * 0.07;
+      const costRate = costRateDenominator > 0 ? (totalCost / costRateDenominator) * 100 : 0;
+      const grossMarginRate = totalPrice > 0 ? (grossProfit / totalPrice) * 100 : 0;
+      const sellingExpenseRate = subtotalPrice > 0 ? (sellingExpense / subtotalPrice) * 100 : 0;
+      const operatingMarginRate = totalPrice > 0 ? (operatingProfit / totalPrice) * 100 : 0;
+
+      // 画面反映
+      if (psMaterialAmountEl) {
+        psMaterialAmountEl.textContent = fmtYen(materialCost);
+      }
+      if (psMaterialRateEl) {
+        psMaterialRateEl.textContent = materialRate.toFixed(2);
+      }
+      if (psCostAmountEl) {
+        psCostAmountEl.textContent = fmtYen(totalCost);
+      }
+      if (psCostRateEl) {
+        psCostRateEl.textContent = costRate.toFixed(2);
+      }
+      if (psGrossAmountEl) {
+        psGrossAmountEl.textContent = fmtYen(grossProfit);
+      }
+      if (psGrossRateEl) {
+        psGrossRateEl.textContent = grossMarginRate.toFixed(2);
+      }
+      if (psSellingAmountEl) {
+        psSellingAmountEl.textContent = fmtYen(sellingExpense);
+      }
+      if (psSellingRateEl) {
+        psSellingRateEl.textContent = sellingExpenseRate.toFixed(2);
+      }
+      if (psOperatingAmountEl) {
+        psOperatingAmountEl.textContent = fmtYen(operatingProfit);
+      }
+      if (psOperatingRateEl) {
+        psOperatingRateEl.textContent = operatingMarginRate.toFixed(2);
       }
     }
 

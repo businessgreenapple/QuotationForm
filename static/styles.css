@@ -146,10 +146,34 @@ label { display: block; margin: 0 0 0.3rem; color: #334155; }
   gap: 1rem;
   margin: 1.5rem 0;
 }
+
+/* 利益サマリと金額サマリを均等（50%）に分割 */
+.totals-layout > .totals-card,
+.totals-layout > .totals-summary-wrapper {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 @media (max-width: 640px) {
   .totals-layout {
     flex-direction: column;
   }
+  .totals-layout > .totals-card,
+  .totals-layout > .totals-summary-wrapper {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+}
+.totals-summary-wrapper {
+  display: flex;
+  flex: 1;
+}
+.totals-summary-wrapper.single-right {
+  justify-content: flex-end;
+}
+.totals-summary-wrapper.single-right .totals-card {
+  flex: 0 0 50%;
+  max-width: 50%;
 }
 .totals-card {
   flex: 1;
@@ -232,4 +256,11 @@ input:disabled {
   background: #f1f5f9;
   color: #6b7280;
   cursor: not-allowed;
+}
+
+/* 材料費対象の原価金額セルの強調表示 */
+.table td.material-cost-cell {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
 }

@@ -21,20 +21,50 @@
           <th>数量</th>
           <th>単価</th>
           <th>金額</th>
-          <th>原価金額</th>
+          {% if is_admin_mode %}
+            <th>原価金額</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
         {% for it in estimate.items %}
+          {% set is_material = is_admin_mode and (it.product_code in material_product_codes) %}
           <tr>
             <td>{{ it.product_name }}</td>
             <td>{{ it.model_name or '' }}</td>
             <td>{{ it.quantity }}</td>
             <td>¥{{ "{:,.0f}".format(it.unit_price) }}</td>
             <td>¥{{ "{:,.0f}".format(it.line_total_price) }}</td>
-            <td>¥{{ "{:,.0f}".format(it.line_total_cost or 0.0) }}</td>
+            {% if is_admin_mode %}
+              {# 原価金額は、数値だけでなく「10万円」のような表記も数値に正規化して表示する #}
+              {% set raw_cost = it.line_total_cost %}
+              {% if raw_cost is string %}
+                {% set cost_str = raw_cost %}
+                {% if '万円' in cost_str %}
+                  {% set num = cost_str.replace('万円', '').replace(',', '')|float %}
+                  {% set cost_val = num * 10000 %}
+                {% else %}
+                  {% set cost_val = cost_str.replace(',', '')|float %}
+                {% endif %}
+              {% else %}
+                {% set cost_val = raw_cost or 0.0 %}
+              {% endif %}
+              <td{% if is_material %} class="material-cost-cell"{% endif %}>¥{{ "{:,.0f}".format(cost_val or 0.0) }}</td>
+            {% endif %}
           </tr>
         {% endfor %}
+        {# 全見積タイプ共通の「その他」原価行（数量・単価・金額は表示上のみ「-」） #}
+        {% set other_cost = (estimate.subtotal_price * 0.07) if estimate.subtotal_price > 0 else 0.0 %}
+        <tr class="other-cost-row">
+          <td>その他</td>
+          <td></td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          {% if is_admin_mode %}
+            <td>¥{{ "{:,.0f}".format(other_cost) }}</td>
+          {% endif %}
+        </tr>
       </tbody>
     </table>
   </div>
@@ -45,71 +75,81 @@
   {% set operating_profit = estimate.operating_profit or 0.0 %}
   {% set total_price = estimate.total_price or 0.0 %}
   {% set material_cost = material_cost or 0.0 %}
-  {# 材料費率・原価率は「① 小計(税抜)」を分母として計算 #}
-  {% set material_rate = (material_cost / subtotal_price_val * 100.0) if subtotal_price_val > 0 else 0.0 %}
-  {% set cost_rate = ((estimate.subtotal_cost or 0.0) / subtotal_price_val * 100.0) if subtotal_price_val > 0 else 0.0 %}
+  {% set discount_val = estimate.discount or 0.0 %}
+  {% set discount_rate = (discount_val / subtotal_price_val * 100.0) if subtotal_price_val > 0 else 0.0 %}
+  {# 材料費率・原価率は「③ 合計(税抜)」を分母として計算 #}
+  {% set material_rate = (material_cost / total_price * 100.0) if total_price > 0 else 0.0 %}
+  {% set cost_rate = ((estimate.subtotal_cost or 0.0) / total_price * 100.0) if total_price > 0 else 0.0 %}
   {% set gross_margin_rate = (gross_profit / total_price * 100.0) if total_price > 0 else 0.0 %}
   {% set selling_expense_rate = (selling_expense / subtotal_price_val * 100.0) if subtotal_price_val > 0 else 0.0 %}
   {% set operating_margin_rate = (operating_profit / total_price * 100.0) if total_price > 0 else 0.0 %}
   {% set total_incl = total_price * 1.10 %}
 
   <div class="totals-layout">
-    <div class="totals-card totals-card-profit">
-      <h3>利益サマリ</h3>
-      <div class="totals-row-item">
-        <span class="label">⑤ 材料費（⑤/①）</span>
-        <span class="value">
-          ¥{{ "{:,.0f}".format(material_cost) }}
-          （{{ "{:.1f}".format(material_rate) }}%）
-        </span>
+    {% if is_admin_mode %}
+      <div class="totals-card totals-card-profit">
+        <h3>利益サマリ</h3>
+        <div class="totals-row-item">
+          <span class="label">⑤ 材料費（⑤/③）</span>
+          <span class="value">
+            ¥{{ "{:,.0f}".format(material_cost) }}
+            （{{ "{:.2f}".format(material_rate) }}%）
+          </span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">⑥ 原価（⑥/③）</span>
+          <span class="value">
+            ¥{{ "{:,.0f}".format(estimate.subtotal_cost or 0.0) }}
+            （{{ "{:.2f}".format(cost_rate) }}%）
+          </span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">⑦ 粗利（③-⑥）</span>
+          <span class="value">
+            ¥{{ "{:,.0f}".format(gross_profit) }}
+            （{{ "{:.2f}".format(gross_margin_rate) }}%）
+          </span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">⑧ 販管費（①*0.2）</span>
+          <span class="value">
+            ¥{{ "{:,.0f}".format(selling_expense) }}
+            （{{ "{:.2f}".format(selling_expense_rate) }}%）
+          </span>
+        </div>
+        <div class="totals-row-item highlight">
+          <span class="label">⑨ 営業利益（⑦-⑧）</span>
+          <span class="value">
+            ¥{{ "{:,.0f}".format(operating_profit) }}
+            （{{ "{:.2f}".format(operating_margin_rate) }}%）
+          </span>
+        </div>
       </div>
-      <div class="totals-row-item">
-        <span class="label">⑥ 原価（⑥/①）</span>
-        <span class="value">
-          ¥{{ "{:,.0f}".format(estimate.subtotal_cost or 0.0) }}
-          （{{ "{:.1f}".format(cost_rate) }}%）
-        </span>
-      </div>
-      <div class="totals-row-item">
-        <span class="label">⑦ 粗利（③-⑥）</span>
-        <span class="value">
-          ¥{{ "{:,.0f}".format(gross_profit) }}
-          （{{ "{:.1f}".format(gross_margin_rate) }}%）
-        </span>
-      </div>
-      <div class="totals-row-item">
-        <span class="label">⑧ 販管費（①*0.2）</span>
-        <span class="value">
-          ¥{{ "{:,.0f}".format(selling_expense) }}
-          （{{ "{:.1f}".format(selling_expense_rate) }}%）
-        </span>
-      </div>
-      <div class="totals-row-item highlight">
-        <span class="label">⑨ 営業利益（⑦-⑧）</span>
-        <span class="value">
-          ¥{{ "{:,.0f}".format(operating_profit) }}
-          （{{ "{:.1f}".format(operating_margin_rate) }}%）
-        </span>
-      </div>
-    </div>
+    {% endif %}
 
-    <div class="totals-card totals-card-summary">
-      <h3>金額サマリ</h3>
-      <div class="totals-row-item">
-        <span class="label">① 小計(税抜)</span>
-        <span class="value">¥{{ "{:,.0f}".format(estimate.subtotal_price) }}</span>
-      </div>
-      <div class="totals-row-item">
-        <span class="label">② 値引(税抜)</span>
-        <span class="value">-¥{{ "{:,.0f}".format(estimate.discount or 0.0) }}</span>
-      </div>
-      <div class="totals-row-item">
-        <span class="label">③ 合計(税抜)</span>
-        <span class="value">¥{{ "{:,.0f}".format(estimate.total_price) }}</span>
-      </div>
-      <div class="totals-row-item highlight">
-        <span class="label">④ 合計(税込)</span>
-        <span class="value">¥{{ "{:,.0f}".format(total_incl) }}</span>
+    <div class="totals-summary-wrapper{% if not is_admin_mode %} single-right{% endif %}">
+      <div class="totals-card totals-card-summary">
+        <h3>金額サマリ</h3>
+        <div class="totals-row-item">
+          <span class="label">① 小計(税抜)</span>
+          <span class="value">¥{{ "{:,.0f}".format(estimate.subtotal_price) }}</span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">② 値引(税抜)</span>
+          <span class="value">-¥{{ "{:,.0f}".format(discount_val) }}</span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label"> 　 値引率</span>
+          <span class="value">{{ "{:.2f}".format(discount_rate) }}%</span>
+        </div>
+        <div class="totals-row-item">
+          <span class="label">③ 合計(税抜)</span>
+          <span class="value">¥{{ "{:,.0f}".format(estimate.total_price) }}</span>
+        </div>
+        <div class="totals-row-item highlight">
+          <span class="label">④ 合計(税込)</span>
+          <span class="value">¥{{ "{:,.0f}".format(total_incl) }}</span>
+        </div>
       </div>
     </div>
   </div>

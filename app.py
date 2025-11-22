@@ -4,12 +4,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 
 # Flask app setup
 app = Flask(__name__, instance_relative_config=True)
 app.config['SECRET_KEY'] = 'dev-secret-key'  # 開発用
+# 管理モード用の簡易パスワード（必要に応じて環境変数などに移行）
+app.config.setdefault('VIEW_COST_PASSWORD', '393290')
 
 # SQLite DB (instance/app.db)
 instance_path = Path(app.instance_path)
@@ -156,6 +158,7 @@ def estimate_new():
         models=models,
         selected_types=selected_types,
         selected_type=(selected_types[0] if selected_types else ''),
+        is_admin_mode=session.get('is_admin_mode', False),
     )
 
 
@@ -232,13 +235,9 @@ def estimate_create():
         if it.product_code == 'SOL-002':
             powercon_count += int(it.quantity or 0)
 
-    # 電材費：システム容量(kW)×6857 + 20000
-    # 電気工事費：(パワコン台数×25000)
-    # 原価 = 電材費 + 電気工事費
-    if system_capacity_kw > 0 or powercon_count > 0:
-        electric_material_cost = float(system_capacity_kw) * 6857.0 + 20000.0
-        electric_work_cost = float(powercon_count) * 25000.0
-        total_electric_cost_unit = electric_material_cost + electric_work_cost
+    # 電気工事費 原価（単価）：システム容量(kW)×6,857 + 20,000
+    if system_capacity_kw > 0:
+        total_electric_cost_unit = float(system_capacity_kw) * 6857.0 + 20000.0
 
         for it in items:
             if it.product_code == 'SOL-009':
@@ -287,6 +286,9 @@ def estimate_create():
 
     # アイテムから小計・原価小計を集計
     subtotal_price, subtotal_cost, _, _ = calculate_estimate_totals(items)
+    # 「その他」原価（全見積タイプ共通）：① 小計(税抜) × 0.07 を原価に加算
+    other_cost = subtotal_price * 0.07
+    subtotal_cost = subtotal_cost + other_cost
 
     # フォームの値引額（税抜）
     discount_str = form.get('discount_amount', '0').strip()
@@ -296,6 +298,14 @@ def estimate_create():
         discount = 0.0
     if discount < 0:
         discount = 0.0
+
+    # 一般モードの場合、値引額の上限は小計の5%
+    is_admin_mode = session.get('is_admin_mode', False)
+    if not is_admin_mode:
+        max_discount = int(subtotal_price * 0.05)
+        if discount > max_discount:
+            discount = float(max_discount)
+            flash(f'一般モードでの値引上限（5%: ¥{max_discount:,}）を超えたため、上限値に補正しました。', 'warning')
 
     # 合計＝小計 − 値引（マイナスにはしない）
     total_price = max(0.0, subtotal_price - discount)
@@ -392,7 +402,107 @@ def estimate_detail(estimate_id: int):
         if it.product_code in BATTERY_MATERIAL_PRODUCT_CODES:
             material_cost += float(it.line_total_cost or 0.0)
 
-    return render_template('estimate_detail.html', estimate=est, material_cost=material_cost)
+    # --- 材料費（単機能V2H）の算出 ---
+    # 対象：本体搬入費、電気工事労務費、取付工事費、現場雑費、現場管理費 以外
+    #       （= V2H本体、設置部材セット、施工ケーブルセット、その他部材費、
+    #          リモコンセット、ケーブルカバー、AC_CTケーブルセット、CTセンサ）
+    V2H_SINGLE_MATERIAL_PRODUCT_CODES = {
+        'V2H-001',  # V2H本体
+        'V2H-002',  # 設置部材セット
+        'V2H-003',  # 施工ケーブルセット
+        'V2H-005',  # その他部材費
+        'V2H-010',  # リモコンセット
+        'V2H-011',  # ケーブルカバー
+        'V2H-012',  # AC_CTケーブルセット
+        'V2H-013',  # CTセンサ（内径θ24）
+    }
+    for it in est.items:
+        if it.product_code in V2H_SINGLE_MATERIAL_PRODUCT_CODES:
+            material_cost += float(it.line_total_cost or 0.0)
+
+    # --- 材料費（トライブリッドV2H）の算出 ---
+    # 対象：V2H本体、V2H通信ケーブル、その他部材、V2Hポッド用ポール
+    V2H_HYBRID_MATERIAL_PRODUCT_CODES = {
+        'TVH-001',  # V2H本体
+        'TVH-002',  # V2H通信ケーブル
+        'TVH-004',  # その他部材
+        'TVH-007',  # V2Hポッド用ポール
+    }
+    for it in est.items:
+        if it.product_code in V2H_HYBRID_MATERIAL_PRODUCT_CODES:
+            material_cost += float(it.line_total_cost or 0.0)
+
+    # --- 材料費（パワコン交換）の算出 ---
+    # 対象：パワーコンディショナ、設置工事費の材料部分、電気工事費（材料費込）の材料部分
+    # パワコン台数を集計
+    powercon_exchange_count = 0
+    for it in est.items:
+        if it.product_code == 'PWR-001':
+            powercon_exchange_count += int(it.quantity or 0)
+
+    # パワーコンディショナ（PWR-001）の原価を材料費に追加
+    for it in est.items:
+        if it.product_code == 'PWR-001':
+            material_cost += float(it.line_total_cost or 0.0)
+
+    # 設置工事費（PWR-003）の材料部分：パワコン1台につき10600円
+    if powercon_exchange_count > 0:
+        installation_material_cost = powercon_exchange_count * 10600.0
+        material_cost += installation_material_cost
+
+    # 電気工事費（材料費込）（PWR-004）の材料部分：パワコン1台につき5000円
+    if powercon_exchange_count > 0:
+        electric_material_cost = powercon_exchange_count * 5000.0
+        material_cost += electric_material_cost
+
+    # 材料費対象の商品コードセットをテンプレートに渡す
+    material_product_codes = (
+        MATERIAL_PRODUCT_CODES
+        | BATTERY_MATERIAL_PRODUCT_CODES
+        | V2H_SINGLE_MATERIAL_PRODUCT_CODES
+        | V2H_HYBRID_MATERIAL_PRODUCT_CODES
+    )
+    # SOL-009（電気工事費）は電材費部分が材料費に含まれるため、材料費対象として扱う
+    material_product_codes.add('SOL-009')
+    # PWR-001（パワーコンディショナ）は材料費に含まれるため、材料費対象として扱う
+    material_product_codes.add('PWR-001')
+
+    # 管理モード（セッション）フラグ
+    is_admin_mode = session.get('is_admin_mode', False)
+
+    return render_template(
+        'estimate_detail.html',
+        estimate=est,
+        material_cost=material_cost,
+        material_product_codes=material_product_codes,
+        is_admin_mode=is_admin_mode,
+    )
+
+
+@app.route('/admin_mode_login', methods=['GET', 'POST'])
+def admin_mode_login():
+    """管理モード用の簡易ログイン画面"""
+    next_url = request.args.get('next') or request.form.get('next') or url_for('estimate_list')
+    if request.method == 'POST':
+        password = request.form.get('password', '').strip()
+        view_password = app.config.get('VIEW_COST_PASSWORD', '393290')
+        if password == view_password:
+            session['is_admin_mode'] = True
+            flash('管理モードに切り替えました。', 'success')
+            return redirect(next_url)
+        flash('パスワードが正しくありません。', 'error')
+        return redirect(url_for('admin_mode_login', next=next_url))
+
+    return render_template('admin_mode_login.html', next=next_url)
+
+
+@app.get('/admin_mode_logout')
+def admin_mode_logout():
+    """管理モードを解除"""
+    session.pop('is_admin_mode', None)
+    flash('管理モードを終了しました。', 'success')
+    next_url = request.args.get('next') or url_for('estimate_list')
+    return redirect(next_url)
 
 
 if __name__ == '__main__':

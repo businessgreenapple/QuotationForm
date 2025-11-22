@@ -8,9 +8,16 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="container">
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
       <a href="{{ url_for('estimate_list') }}" class="brand">見積アプリ（モック）</a>
-      
+      <nav>
+        {% if session.get('is_admin_mode') %}
+          <span style="margin-right: 0.5rem; font-size: 0.85rem; opacity: 0.8;">管理モード中</span>
+          <a href="{{ url_for('admin_mode_logout', next=request.full_path) }}" class="btn danger" style="font-size: 0.85rem; padding: 0.3rem 0.6rem;">終了</a>
+        {% else %}
+          <a href="{{ url_for('admin_mode_login', next=request.full_path) }}" class="btn" style="font-size: 0.85rem; padding: 0.3rem 0.6rem; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);">管理</a>
+        {% endif %}
+      </nav>
     </div>
   </header>
 

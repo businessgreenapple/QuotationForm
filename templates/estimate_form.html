@@ -141,13 +141,9 @@
 
   <script>
     const selectedTypes = {{ (selected_types or []) | tojson }};
-    const selectedType = "{{ selected_type }}"; // 後方互換（単一指定）
+    const selectedType = {{ (selected_type or '') | tojson }}; // 後方互換（単一指定）
     const isAdminMode = {{ is_admin_mode | tojson }};
-    const productsRaw = [
-      {% for p in products %}
-        { code: "{{ p.code }}", name: "{{ p.name }}", unit_price: {{ p.unit_price|int }}, unit_cost: {{ p.unit_cost|int }} }{{ "," if not loop.last }}
-      {% endfor %}
-    ];
+    const productsRaw = {{ products | tojson }};
     const products = (() => {
       const seen = new Set();
       const arr = [];
@@ -1310,15 +1306,34 @@
         } else if (prodCode === 'RRI-001') {
           // 太陽光撤去工事：25000 + kW * 20000
           upInput.value = Math.round(25000 + totalCapacityKw * 20000);
+          if (ucInput) {
+            const removalCost =
+              totalCapacityKw < 5 ? 50000 :
+              totalCapacityKw < 8 ? 75000 : 100000;
+            ucInput.value = removalCost;
+          }
         } else if (prodCode === 'RRI-002') {
           // 太陽光再設置工事：25000 + kW * 25000
           upInput.value = Math.round(25000 + totalCapacityKw * 25000);
+          if (ucInput) {
+            const reinstallCost =
+              totalCapacityKw < 5 ? 50000 :
+              totalCapacityKw < 8 ? 75000 : 100000;
+            ucInput.value = reinstallCost;
+          }
         } else if (prodCode === 'RRI-003') {
           // 電気工事費(電材費込み)：システム容量(kW) * 12000
           upInput.value = Math.round(totalCapacityKw * 12000);
+          if (ucInput) {
+            const electricCost = Math.round(totalCapacityKw * 6857 + 20000);
+            ucInput.value = electricCost;
+          }
         } else if (prodCode === 'RRI-004') {
           // 架台費：システム容量(kW) * 14000
           upInput.value = Math.round(totalCapacityKw * 14000);
+          if (ucInput) {
+            ucInput.value = Math.round(totalCapacityKw * 6445);
+          }
         } else if (prodCode === 'RRI-005') {
           // 産業廃棄物処分費（太陽電池モジュール）：1枚につき3000
           upInput.value = 3000;
@@ -1422,6 +1437,8 @@
           V2H_SINGLE_MATERIAL_PRODUCT_CODES.has(code) ||
           V2H_HYBRID_MATERIAL_PRODUCT_CODES.has(code) ||
           code === 'SOL-009' ||
+          code === 'RRI-003' ||
+          code === 'RRI-004' ||
           code === 'PWR-001'  // パワコン交換：パワーコンディショナ
         ) {
           materialCost += lc;
